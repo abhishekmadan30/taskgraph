@@ -7,26 +7,48 @@ import collections
 import pprint
 import re
 
+import msgspec
 import voluptuous
 
 import taskgraph
 from taskgraph.util.keyed_by import evaluate_keyed_by, iter_dot_path
 
 
-def validate_schema(schema, obj, msg_prefix):
+def validate_schema(schema, obj, msg_prefix, use_msgspec=False):
     """
     Validate that object satisfies schema.  If not, generate a useful exception
     beginning with msg_prefix.
+
+    Args:
+        schema: Either a voluptuous.Schema or msgspec.Struct type
+        obj: Object to validate
+        msg_prefix: Prefix for error messages
+        use_msgspec: If True, use msgspec for validation (default: False)
     """
     if taskgraph.fast:
         return
-    try:
-        schema(obj)
-    except voluptuous.MultipleInvalid as exc:
-        msg = [msg_prefix]
-        for error in exc.errors:
-            msg.append(str(error))
-        raise Exception("\n".join(msg) + "\n" + pprint.pformat(obj))
+
+    if use_msgspec:
+        # Handle msgspec validation
+        try:
+            if isinstance(schema, type) and issubclass(schema, msgspec.Struct):
+                # For msgspec.Struct types, validate by converting
+                msgspec.convert(obj, schema)
+            else:
+                # For other msgspec validators
+                schema.decode(msgspec.json.encode(obj))
+        except (msgspec.ValidationError, msgspec.DecodeError) as exc:
+            msg = [msg_prefix, str(exc)]
+            raise Exception("\n".join(msg) + "\n" + pprint.pformat(obj))
+    else:
+        # Handle voluptuous validation (default behavior)
+        try:
+            schema(obj)
+        except voluptuous.MultipleInvalid as exc:
+            msg = [msg_prefix]
+            for error in exc.errors:
+                msg.append(str(error))
+            raise Exception("\n".join(msg) + "\n" + pprint.pformat(obj))
 
 
 def optionally_keyed_by(*arguments):
