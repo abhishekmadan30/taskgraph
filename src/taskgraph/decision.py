@@ -9,9 +9,10 @@ import pathlib
 import shutil
 import time
 from pathlib import Path
+from typing import Any, Dict, Optional
 
+import msgspec
 import yaml
-from voluptuous import Optional
 
 from taskgraph.actions import render_actions_json
 from taskgraph.create import create_tasks
@@ -20,7 +21,7 @@ from taskgraph.parameters import Parameters, get_version
 from taskgraph.taskgraph import TaskGraph
 from taskgraph.util import json
 from taskgraph.util.python_path import find_object
-from taskgraph.util.schema import Schema, validate_schema
+from taskgraph.util.schema import validate_schema
 from taskgraph.util.vcs import Repository, get_repository
 from taskgraph.util.yaml import load_yaml
 
@@ -40,11 +41,11 @@ PER_PROJECT_PARAMETERS = {
 
 
 #: Schema for try_task_config.json version 2
-try_task_config_schema_v2 = Schema(
-    {
-        Optional("parameters"): {str: object},
-    }
-)
+class TryTaskConfigSchemaV2(msgspec.Struct, kw_only=True, omit_defaults=True):
+    parameters: Optional[Dict[str, Any]] = None
+
+
+try_task_config_schema_v2 = TryTaskConfigSchemaV2
 
 
 def full_task_graph_to_runnable_tasks(full_task_json):
@@ -357,6 +358,7 @@ def set_try_config(parameters, task_config_file):
                 try_task_config_schema_v2,
                 task_config,
                 "Invalid v2 `try_task_config.json`.",
+                use_msgspec=True,
             )
             parameters.update(task_config["parameters"])
             return
