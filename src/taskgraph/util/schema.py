@@ -28,6 +28,14 @@ def validate_schema(schema, obj, msg_prefix, use_msgspec=False):
     if taskgraph.fast:
         return
 
+    # Auto-detect msgspec schemas
+    if (
+        not use_msgspec
+        and isinstance(schema, type)
+        and issubclass(schema, msgspec.Struct)
+    ):
+        use_msgspec = True
+
     if use_msgspec:
         # Handle msgspec validation
         try:
