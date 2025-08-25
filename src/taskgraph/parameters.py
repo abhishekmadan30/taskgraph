@@ -10,12 +10,15 @@ from datetime import datetime
 from io import BytesIO
 from pprint import pformat
 from subprocess import CalledProcessError
+from typing import Dict, List, Optional, Union
 from unittest.mock import Mock
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
 import mozilla_repo_urls
-from voluptuous import ALLOW_EXTRA, Any, Optional, Required, Schema
+import msgspec
+from voluptuous import ALLOW_EXTRA as V_ALLOW_EXTRA
+from voluptuous import Schema as VSchema
 
 from taskgraph.util import json, yaml
 from taskgraph.util.readonlydict import ReadOnlyDict
@@ -28,44 +31,54 @@ class ParameterMismatch(Exception):
     """Raised when a parameters.yml has extra or missing parameters."""
 
 
+class CodeReviewConfig(msgspec.Struct, kw_only=True, rename="kebab"):
+    """Code review configuration."""
+
+    phabricator_build_target: str
+
+
 #: Schema for base parameters.
 #: Please keep this list sorted and in sync with docs/reference/parameters.rst
-base_schema = Schema(
-    {
-        Required("base_repository"): str,
-        Required("base_ref"): str,
-        Required("base_rev"): str,
-        Required("build_date"): int,
-        Required("build_number"): int,
-        Required("do_not_optimize"): [str],
-        Required("enable_always_target"): Any(bool, [str]),
-        Required("existing_tasks"): {str: str},
-        Required("files_changed"): [str],
-        Required("filters"): [str],
-        Required("head_ref"): str,
-        Required("head_repository"): str,
-        Required("head_rev"): str,
-        Required("head_tag"): str,
-        Required("level"): str,
-        Required("moz_build_date"): str,
-        Required("next_version"): Any(str, None),
-        Required("optimize_strategies"): Any(str, None),
-        Required("optimize_target_tasks"): bool,
-        Required("owner"): str,
-        Required("project"): str,
-        Required("pushdate"): int,
-        Required("pushlog_id"): str,
-        Required("repository_type"): str,
-        # target-kinds is not included, since it should never be
-        # used at run-time
-        Required("target_tasks_method"): str,
-        Required("tasks_for"): str,
-        Required("version"): Any(str, None),
-        Optional("code-review"): {
-            Required("phabricator-build-target"): str,
-        },
-    }
-)
+class BaseSchema(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):
+    """Base parameters schema.
+
+    This defines the core parameters that all taskgraph runs require.
+    """
+
+    base_repository: str
+    base_ref: str
+    base_rev: str
+    build_date: int
+    build_number: int
+    do_not_optimize: List[str]
+    enable_always_target: Union[bool, List[str]]
+    existing_tasks: Dict[str, str]
+    files_changed: List[str]
+    filters: List[str]
+    head_ref: str
+    head_repository: str
+    head_rev: str
+    head_tag: str
+    level: str
+    moz_build_date: str
+    next_version: Optional[str]
+    optimize_strategies: Optional[str]
+    optimize_target_tasks: bool
+    owner: str
+    project: str
+    pushdate: int
+    pushlog_id: str
+    repository_type: str
+    # target-kinds is not included, since it should never be
+    # used at run-time
+    target_tasks_method: str
+    tasks_for: str
+    version: Optional[str]
+    code_review: Optional[CodeReviewConfig] = None
+
+
+# Keep backward compatibility
+base_schema = BaseSchema
 
 
 def get_contents(path):
@@ -143,7 +156,7 @@ def extend_parameters_schema(schema, defaults_fn=None):
     graph-configuration.
 
     Args:
-        schema (Schema): The voluptuous.Schema object used to describe extended
+        schema: The schema object (voluptuous or msgspec) used to describe extended
             parameters.
         defaults_fn (function): A function which takes no arguments and returns a
             dict mapping parameter name to default value in the
@@ -151,7 +164,20 @@ def extend_parameters_schema(schema, defaults_fn=None):
     """
     global base_schema
     global defaults_functions
-    base_schema = base_schema.extend(schema)
+
+    # Handle extending the schema based on its type
+    if isinstance(base_schema, type) and issubclass(base_schema, msgspec.Struct):
+        # For msgspec schemas, we can't dynamically extend them
+        # Store the extension schema for use during validation
+        if not hasattr(base_schema, "_extensions"):
+            base_schema._extensions = []
+        base_schema._extensions.append(schema)
+    else:
+        if isinstance(schema, dict):
+            base_schema = base_schema.extend(schema)
+        elif isinstance(schema, VSchema):
+            base_schema = base_schema.extend(schema.schema)
+
     if defaults_fn:
         defaults_functions.append(defaults_fn)
 
@@ -214,13 +240,84 @@ class Parameters(ReadOnlyDict):
         return kwargs
 
     def check(self):
-        schema = (
-            base_schema if self.strict else base_schema.extend({}, extra=ALLOW_EXTRA)
-        )
-        try:
-            validate_schema(schema, self.copy(), "Invalid parameters:")
-        except Exception as e:
-            raise ParameterMismatch(str(e))
+        # For msgspec schemas, we need to validate differently
+        if isinstance(base_schema, type) and issubclass(base_schema, msgspec.Struct):
+            try:
+                # Convert underscore keys to kebab-case for msgspec validation
+                params = self.copy()
+                # BaseSchema uses kebab-case (rename="kebab"), so we need to convert keys
+                kebab_params = {}
+                for k, v in params.items():
+                    # Convert underscore to kebab-case
+                    kebab_key = k.replace("_", "-")
+                    kebab_params[kebab_key] = v
+
+                # Handle extensions if present
+                if hasattr(base_schema, "_extensions"):
+                    for ext_schema in base_schema._extensions:
+                        if isinstance(ext_schema, dict):
+                            ext_schema = VSchema(ext_schema)
+                        # Validate against the extension
+                        if self.strict:
+                            ext_schema(params)
+                        else:
+                            ext_schema.extend({}, extra=V_ALLOW_EXTRA)(params)
+
+                if self.strict:
+                    # Strict validation with msgspec
+                    # First check for extra fields
+                    schema_fields = {
+                        f.encode_name for f in msgspec.structs.fields(base_schema)
+                    }
+
+                    # Add extension fields if present
+                    if hasattr(base_schema, "_extensions"):
+                        for ext_schema in base_schema._extensions:
+                            if isinstance(ext_schema, dict):
+                                for key in ext_schema.keys():
+                                    # Extract field name from voluptuous Required/Optional
+                                    if hasattr(key, "schema"):
+                                        field_name = key.schema.replace("_", "-")
+                                    else:
+                                        field_name = str(key).replace("_", "-")
+                                    schema_fields.add(field_name)
+
+                    extra_fields = set(kebab_params.keys()) - schema_fields
+                    if extra_fields:
+                        raise ParameterMismatch(
+                            f"Invalid parameters: Extra fields not allowed: {extra_fields}"
+                        )
+                    # Now validate the base schema fields
+                    base_fields = {
+                        f.encode_name for f in msgspec.structs.fields(base_schema)
+                    }
+                    base_params = {
+                        k: v for k, v in kebab_params.items() if k in base_fields
+                    }
+                    msgspec.convert(base_params, base_schema)
+                else:
+                    # Non-strict: validate only the fields that exist in the schema
+                    # Filter to only schema fields
+                    schema_fields = {
+                        f.encode_name for f in msgspec.structs.fields(base_schema)
+                    }
+                    filtered_params = {
+                        k: v for k, v in kebab_params.items() if k in schema_fields
+                    }
+                    msgspec.convert(filtered_params, base_schema)
+            except (msgspec.ValidationError, msgspec.DecodeError) as e:
+                raise ParameterMismatch(f"Invalid parameters: {e}")
+        else:
+            # Legacy voluptuous validation
+            schema = (
+                base_schema
+                if self.strict
+                else base_schema.extend({}, extra=V_ALLOW_EXTRA)
+            )
+            try:
+                validate_schema(schema, self.copy(), "Invalid parameters:")
+            except Exception as e:
+                raise ParameterMismatch(str(e))
 
     def __getitem__(self, k):
         try:
