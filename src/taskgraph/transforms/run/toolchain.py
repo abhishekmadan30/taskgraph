@@ -5,9 +5,9 @@
 Support for running toolchain-building tasks via dedicated scripts
 """
 
-from textwrap import dedent
+from typing import Any, Dict, List, Literal, Optional, Union
 
-from voluptuous import ALLOW_EXTRA, Any, Optional, Required
+import msgspec
 
 import taskgraph
 from taskgraph.transforms.run import configure_taskdesc_for_run, run_task_using
@@ -18,96 +18,52 @@ from taskgraph.transforms.run.common import (
 )
 from taskgraph.util import path as mozpath
 from taskgraph.util.hash import hash_paths
-from taskgraph.util.schema import Schema
 from taskgraph.util.shell import quote as shell_quote
 
 CACHE_TYPE = "toolchains.v3"
 
+
 #: Schema for run.using toolchain
-toolchain_run_schema = Schema(
-    {
-        Required(
-            "using",
-            description=dedent(
-                """
-                Specifies the run type. Must be "toolchain-script".
-                """
-            ),
-        ): "toolchain-script",
-        Required(
-            "script",
-            description=dedent(
-                """
-                The script (in taskcluster/scripts/misc) to run.
-                """
-            ),
-        ): str,
-        Optional(
-            "arguments",
-            description=dedent(
-                """
-                Arguments to pass to the script.
-                """
-            ),
-        ): [str],
-        Required(
-            "sparse-profile",
-            description=dedent(
-                """
-                Sparse profile to give to checkout using `run-task`. If given,
-                a filename in `build/sparse-profiles`. Defaults to
-                "toolchain-build", i.e., to
-                `build/sparse-profiles/toolchain-build`. If `None`, instructs
-                `run-task` to not use a sparse profile at all.
-                """
-            ),
-        ): Any(str, None),
-        Optional(
-            "resources",
-            description=dedent(
-                """
-                Paths/patterns pointing to files that influence the outcome of
-                a toolchain build.
-                """
-            ),
-        ): [str],
-        Required(
-            "toolchain-artifact",
-            description=dedent(
-                """
-                Path to the artifact produced by the toolchain task.
-                """
-            ),
-        ): str,
-        Optional(
-            "toolchain-alias",
-            description=dedent(
-                """
-                An alias that can be used instead of the real toolchain task name in
-                fetch stanzas for tasks.
-                """
-            ),
-        ): Any(str, [str]),
-        Optional(
-            "toolchain-env",
-            description=dedent(
-                """
-                Additional env variables to add to the worker when using this
-                toolchain.
-                """
-            ),
-        ): {str: object},
-        Required(
-            "workdir",
-            description=dedent(
-                """
-                Base work directory used to set up the task.
-                """
-            ),
-        ): str,
-    },
-    extra=ALLOW_EXTRA,
-)
+class ToolchainRunSchema(
+    msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"
+):
+    """
+    Schema for toolchain-script run configuration.
+
+    Attributes:
+        using: Specifies the run type. Must be "toolchain-script".
+        script: The script (in taskcluster/scripts/misc) to run.
+        arguments: Arguments to pass to the script.
+        sparse_profile: Sparse profile to give to checkout using `run-task`. If given,
+                       a filename in `build/sparse-profiles`. Defaults to
+                       "toolchain-build", i.e., to
+                       `build/sparse-profiles/toolchain-build`. If `None`, instructs
+                       `run-task` to not use a sparse profile at all.
+        resources: Paths/patterns pointing to files that influence the outcome of
+                  a toolchain build.
+        toolchain_artifact: Path to the artifact produced by the toolchain task.
+        toolchain_alias: An alias that can be used instead of the real toolchain task name in
+                        fetch stanzas for tasks.
+        toolchain_env: Additional env variables to add to the worker when using this
+                      toolchain.
+        workdir: Base work directory used to set up the task.
+    """
+
+    using: Literal["toolchain-script"]
+    script: str
+    sparse_profile: Optional[str]  # Can be None to skip sparse profile
+    toolchain_artifact: str
+    workdir: str
+    arguments: Optional[List[str]] = None
+    resources: Optional[List[str]] = None
+    toolchain_alias: Optional[Union[str, List[str]]] = None
+    toolchain_env: Optional[Dict[str, Any]] = None
+    # Allow extra fields
+    _extra: Optional[Dict[str, Any]] = msgspec.field(default=None, name="")
+
+
+# Backward compatibility
+toolchain_run_schema = ToolchainRunSchema
 
 
 def get_digest_data(config, run, taskdesc):
@@ -213,7 +169,7 @@ toolchain_defaults = {
 @run_task_using(
     "docker-worker",
     "toolchain-script",
-    schema=toolchain_run_schema,
+    schema=ToolchainRunSchema,
     defaults=toolchain_defaults,
 )
 def docker_worker_toolchain(config, task, taskdesc):
@@ -223,7 +179,7 @@ def docker_worker_toolchain(config, task, taskdesc):
 @run_task_using(
     "generic-worker",
     "toolchain-script",
-    schema=toolchain_run_schema,
+    schema=ToolchainRunSchema,
     defaults=toolchain_defaults,
 )
 def generic_worker_toolchain(config, task, taskdesc):

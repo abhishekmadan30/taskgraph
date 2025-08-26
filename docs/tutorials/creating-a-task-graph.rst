@@ -136,12 +136,10 @@ comments for explanations):
 
 .. code-block:: python
 
-   from voluptuous import Optional, Required
-
+   from taskgraph.util.schema import Optional, Required, Schema
    from taskgraph.transforms.base import TransformSequence
-   from taskgraph.util.schema import Schema
 
-   # Define the schema. We use the `voluptuous` package to handle validation.
+   # Define the schema. We use our schema validation to ensure correctness.
    hello_description_schema = Schema({
        Required("text"): str,
        Optional("description"): str,

@@ -1,13 +1,10 @@
-from voluptuous import ALLOW_EXTRA, Required
-
 from taskgraph.transforms.base import TransformSequence
-from taskgraph.util.schema import Schema
+from taskgraph.util.schema import Required, Schema
 
 HELLO_SCHEMA = Schema(
     {
         Required("noun"): str,
-    },
-    extra=ALLOW_EXTRA,
+    }
 )
 
 transforms = TransformSequence()

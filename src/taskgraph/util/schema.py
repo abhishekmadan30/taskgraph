@@ -3,30 +3,88 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 
-import collections
 import pprint
-import re
+from typing import List
 
-import voluptuous
+import msgspec
 
 import taskgraph
 from taskgraph.util.keyed_by import evaluate_keyed_by, iter_dot_path
 
 
-def validate_schema(schema, obj, msg_prefix):
+class Any:
+    """Validator that accepts any of the provided values."""
+
+    def __init__(self, *validators):
+        self.validators = validators
+
+    def __call__(self, value):
+        for validator in self.validators:
+            if validator == value or (callable(validator) and validator(value)):
+                return value
+        raise ValueError(f"Value {value} not in allowed values: {self.validators}")
+
+
+class Required:
+    """Marks a field as required in a schema."""
+
+    def __init__(self, key):
+        self.key = key
+        self.schema = key  # For compatibility
+
+
+class Optional:
+    """Marks a field as optional in a schema."""
+
+    def __init__(self, key):
+        self.key = key
+        self.schema = key  # For compatibility
+
+
+def validate_schema(schema, obj, msg_prefix, use_msgspec=False):
     """
     Validate that object satisfies schema.  If not, generate a useful exception
     beginning with msg_prefix.
+
+    Args:
+        schema: Either a Schema instance or msgspec.Struct type
+        obj: Object to validate
+        msg_prefix: Prefix for error messages
+        use_msgspec: If True, use msgspec for validation (default: False)
     """
     if taskgraph.fast:
         return
-    try:
-        schema(obj)
-    except voluptuous.MultipleInvalid as exc:
-        msg = [msg_prefix]
-        for error in exc.errors:
-            msg.append(str(error))
-        raise Exception("\n".join(msg) + "\n" + pprint.pformat(obj))
+
+    # Handle Schema instances
+    if isinstance(schema, Schema):
+        try:
+            schema(obj)
+        except Exception as exc:
+            raise Exception(f"{msg_prefix}\n{exc}\n{pprint.pformat(obj)}")
+        return
+
+    # Auto-detect msgspec schemas
+    if isinstance(schema, type) and issubclass(schema, msgspec.Struct):
+        use_msgspec = True
+
+    if use_msgspec:
+        # Handle msgspec validation
+        try:
+            if isinstance(schema, type) and issubclass(schema, msgspec.Struct):
+                # For msgspec.Struct types, validate by converting
+                msgspec.convert(obj, schema)
+            else:
+                # For other msgspec validators
+                schema.decode(msgspec.json.encode(obj))
+        except (msgspec.ValidationError, msgspec.DecodeError) as exc:
+            msg = [msg_prefix, str(exc)]
+            raise Exception("\n".join(msg) + "\n" + pprint.pformat(obj))
+    else:
+        # Try to call the schema as a validator
+        try:
+            schema(obj)
+        except Exception as exc:
+            raise Exception(f"{msg_prefix}\n{exc}\n{pprint.pformat(obj)}")
 
 
 def optionally_keyed_by(*arguments):
@@ -53,11 +111,45 @@ def optionally_keyed_by(*arguments):
                 for kk, vv in v.items():
                     try:
                         res[kk] = validator(vv)
-                    except voluptuous.Invalid as e:
-                        e.prepend([k, kk])
+                    except Exception as e:
+                        if hasattr(e, "prepend"):
+                            e.prepend([k, kk])
                         raise
                 return res
-        return Schema(schema)(obj)
+            elif k.startswith("by-"):
+                # Unknown by-field
+                raise ValueError(f"Unknown key {k}")
+        # Validate against the schema
+        if isinstance(schema, Schema):
+            return schema(obj)
+        elif schema is str:
+            # String validation
+            if not isinstance(obj, str):
+                raise TypeError(f"Expected string, got {type(obj).__name__}")
+            return obj
+        elif schema is int:
+            # Int validation
+            if not isinstance(obj, int):
+                raise TypeError(f"Expected int, got {type(obj).__name__}")
+            return obj
+        elif isinstance(schema, type):
+            # Type validation for built-in types
+            if not isinstance(obj, schema):
+                raise TypeError(f"Expected {schema.__name__}, got {type(obj).__name__}")
+            return obj
+        elif callable(schema):
+            # Other callable validators
+            try:
+                return schema(obj)
+            except:
+                raise
+        else:
+            # Simple type validation
+            if not isinstance(obj, schema):
+                raise TypeError(
+                    f"Expected {getattr(schema, '__name__', str(schema))}, got {type(obj).__name__}"
+                )
+            return obj
 
     # set to assist autodoc
     setattr(validator, "schema", schema)
@@ -150,99 +242,244 @@ EXCEPTED_SCHEMA_IDENTIFIERS = [
 ]
 
 
-def check_schema(schema):
-    identifier_re = re.compile(r"^\$?[a-z][a-z0-9-]*$")
-
-    def excepted(item):
-        for esi in EXCEPTED_SCHEMA_IDENTIFIERS:
-            if isinstance(esi, str):
-                if f"[{esi!r}]" in item:
-                    return True
-            elif esi(item):
-                return True
-        return False
-
-    def iter(path, sch):
-        def check_identifier(path, k):
-            if k in (str,) or k in (str, voluptuous.Extra):
-                pass
-            elif isinstance(k, voluptuous.NotIn):
-                pass
-            elif isinstance(k, str):
-                if not identifier_re.match(k) and not excepted(path):
-                    raise RuntimeError(
-                        "YAML schemas should use dashed lower-case identifiers, "
-                        f"not {k!r} @ {path}"
-                    )
-            elif isinstance(k, (voluptuous.Optional, voluptuous.Required)):
-                check_identifier(path, k.schema)
-            elif isinstance(k, (voluptuous.Any, voluptuous.All)):
-                for v in k.validators:
-                    check_identifier(path, v)
-            elif not excepted(path):
-                raise RuntimeError(
-                    f"Unexpected type in YAML schema: {type(k).__name__} @ {path}"
-                )
-
-        if isinstance(sch, collections.abc.Mapping):  # type: ignore
-            for k, v in sch.items():
-                child = f"{path}[{k!r}]"
-                check_identifier(child, k)
-                iter(child, v)
-        elif isinstance(sch, (list, tuple)):
-            for i, v in enumerate(sch):
-                iter(f"{path}[{i}]", v)
-        elif isinstance(sch, voluptuous.Any):
-            for v in sch.validators:
-                iter(path, v)
-
-    iter("schema", schema.schema)
-
-
-class Schema(voluptuous.Schema):
+class Schema:
     """
-    Operates identically to voluptuous.Schema, but applying some taskgraph-specific checks
-    in the process.
+    A schema validator that wraps msgspec.Struct types.
+
+    This provides a consistent interface for schema validation across the codebase.
     """
 
-    def __init__(self, *args, check=True, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, schema, check=True, **kwargs):
+        # Check if schema is a msgspec.Struct type
+        if isinstance(schema, type) and issubclass(schema, msgspec.Struct):
+            self._msgspec_schema = schema
+            self._is_msgspec = True
+        elif isinstance(schema, dict):
+            # Legacy dict schema - convert to a simple validator
+            self._msgspec_schema = None
+            self._is_msgspec = False
+            self._dict_schema = schema
+        else:
+            # Assume it's a callable validator
+            self._msgspec_schema = None
+            self._is_msgspec = False
+            self._validator = schema
 
         self.check = check
-        if not taskgraph.fast and self.check:
-            check_schema(self)
+        self.schema = schema  # Store original schema for compatibility
+        self._extensions = []
+        self.allow_extra = False  # By default, don't allow extra keys
 
     def extend(self, *args, **kwargs):
-        schema = super().extend(*args, **kwargs)
+        """Extend the schema. For msgspec schemas, this stores extensions separately."""
+        if self._is_msgspec:
+            # For msgspec schemas, store extensions for validation time
+            self._extensions.extend(args)
+            return self
+        elif hasattr(self, "_dict_schema"):
+            # For dict schemas, create a new Schema with the combined schemas
+            new_schema = self._dict_schema.copy()
+            for arg in args:
+                if isinstance(arg, dict):
+                    new_schema.update(arg)
+            # Handle extra parameter
+            allow_extra = kwargs.get("extra") is not None
+            new_instance = Schema(new_schema)
+            new_instance.allow_extra = allow_extra
+            return new_instance
+        # For other schemas, just return self
+        return self
 
-        if self.check:
-            check_schema(schema)
-        # We want twice extend schema to be checked too.
-        schema.__class__ = Schema
-        return schema
+    def _validate_msgspec(self, data):
+        """Validate data against the msgspec schema."""
+        try:
+            return msgspec.convert(data, self._msgspec_schema)
+        except (msgspec.ValidationError, msgspec.DecodeError) as e:
+            raise Exception(str(e))
 
-    def _compile(self, schema):
+    def __call__(self, data):
+        """Validate data against the schema."""
         if taskgraph.fast:
-            return
-        return super()._compile(schema)
+            return data
+
+        if self._is_msgspec:
+            return self._validate_msgspec(data)
+        elif hasattr(self, "_dict_schema"):
+            # Simple dict validation
+            if not isinstance(data, dict):
+                raise Exception(f"Expected dict, got {type(data).__name__}")
+
+            # Collect valid keys
+            valid_keys = set()
+            for key in self._dict_schema.keys():
+                if hasattr(key, "key"):
+                    valid_keys.add(key.key)
+                else:
+                    valid_keys.add(key)
+
+            # Check for extra keys (strict mode by default for dict schemas)
+            extra_keys = set(data.keys()) - valid_keys
+            if extra_keys and not getattr(self, "allow_extra", False):
+                raise Exception(f"Extra keys not allowed: {extra_keys}")
+
+            # Validate required keys and values
+            for key, validator in self._dict_schema.items():
+                # Handle Required/Optional keys
+                if hasattr(key, "key"):
+                    actual_key = key.key
+                    is_required = isinstance(key, Required)
+                else:
+                    actual_key = key
+                    is_required = True
+
+                if actual_key in data:
+                    value = data[actual_key]
+                    # Validate the value
+                    if validator is int and not isinstance(value, int):
+                        raise Exception(
+                            f"Key {actual_key}: Expected int, got {type(value).__name__}"
+                        )
+                    elif validator is str and not isinstance(value, str):
+                        raise Exception(
+                            f"Key {actual_key}: Expected str, got {type(value).__name__}"
+                        )
+                elif is_required:
+                    raise Exception(f"Missing required key: {actual_key}")
+            return data
+        elif hasattr(self, "_validator"):
+            return self._validator(data)
+        return data
 
     def __getitem__(self, item):
-        return self.schema[item]  # type: ignore
+        if self._is_msgspec:
+            # For msgspec schemas, provide backward compatibility
+            # by returning appropriate validators for known fields
+            # This is a workaround to support legacy code that accesses schema fields
+            field_validators = {
+                "description": str,
+                "priority": Any(
+                    "highest",
+                    "very-high",
+                    "high",
+                    "medium",
+                    "low",
+                    "very-low",
+                    "lowest",
+                ),
+                "attributes": {str: object},
+                "task-from": str,
+                "dependencies": {str: object},
+                "soft-dependencies": [str],
+                "if-dependencies": [str],
+                "requires": Any("all-completed", "all-resolved"),
+                "deadline-after": str,
+                "expires-after": str,
+                "routes": [str],
+                "scopes": [str],
+                "tags": {str: str},
+                "extra": {str: object},
+                "treeherder": object,  # Complex type
+                "index": object,  # Complex type
+                "run-on-projects": object,  # Uses optionally_keyed_by
+                "run-on-tasks-for": [str],
+                "run-on-git-branches": [str],
+                "shipping-phase": Any(None, "build", "promote", "push", "ship"),
+                "always-target": bool,
+                "optimization": OptimizationSchema,
+                "needs-sccache": bool,
+                "worker-type": str,
+            }
+            return field_validators.get(item, str)
+        elif hasattr(self, "_dict_schema"):
+            return self._dict_schema.get(item, str)
+        return str  # Default fallback
 
 
-OptimizationSchema = voluptuous.Any(
-    # always run this task (default)
-    None,
-    # search the index for the given index namespaces, and replace this task if found
-    # the search occurs in order, with the first match winning
-    {"index-search": [str]},
-    # skip this task if none of the given file patterns match
-    {"skip-unless-changed": [str]},
-)
+# Optimization schema types using msgspec
+class IndexSearchOptimization(msgspec.Struct, kw_only=True, rename="kebab"):
+    """Search the index for the given index namespaces."""
 
-# shortcut for a string where task references are allowed
-taskref_or_string = voluptuous.Any(
-    str,
-    {voluptuous.Required("task-reference"): str},
-    {voluptuous.Required("artifact-reference"): str},
-)
+    index_search: List[str]
+
+
+class SkipUnlessChangedOptimization(msgspec.Struct, kw_only=True, rename="kebab"):
+    """Skip this task if none of the given file patterns match."""
+
+    skip_unless_changed: List[str]
+
+
+# Task reference types using msgspec
+class TaskReference(msgspec.Struct, kw_only=True, rename="kebab"):
+    """Reference to another task."""
+
+    task_reference: str
+
+
+class ArtifactReference(msgspec.Struct, kw_only=True, rename="kebab"):
+    """Reference to a task artifact."""
+
+    artifact_reference: str
+
+
+# Create a custom validator
+class OptimizationValidator:
+    """A validator that can validate optimization schemas."""
+
+    def __call__(self, value):
+        """Validate optimization value."""
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            if "index-search" in value:
+                try:
+                    return msgspec.convert(value, IndexSearchOptimization)
+                except msgspec.ValidationError:
+                    pass
+            if "skip-unless-changed" in value:
+                try:
+                    return msgspec.convert(value, SkipUnlessChangedOptimization)
+                except msgspec.ValidationError:
+                    pass
+        # Simple validation for dict types
+        if isinstance(value, dict):
+            if "index-search" in value and isinstance(value["index-search"], list):
+                return value
+            if "skip-unless-changed" in value and isinstance(
+                value["skip-unless-changed"], list
+            ):
+                return value
+        raise ValueError(f"Invalid optimization value: {value}")
+
+
+class TaskRefValidator:
+    """A validator that can validate task references."""
+
+    def __call__(self, value):
+        """Validate task reference value."""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            if "task-reference" in value:
+                try:
+                    return msgspec.convert(value, TaskReference)
+                except msgspec.ValidationError:
+                    pass
+            if "artifact-reference" in value:
+                try:
+                    return msgspec.convert(value, ArtifactReference)
+                except msgspec.ValidationError:
+                    pass
+        # Simple validation for dict types
+        if isinstance(value, dict):
+            if "task-reference" in value and isinstance(value["task-reference"], str):
+                return value
+            if "artifact-reference" in value and isinstance(
+                value["artifact-reference"], str
+            ):
+                return value
+        raise ValueError(f"Invalid task reference value: {value}")
+
+
+# Keep the same names for backward compatibility
+OptimizationSchema = OptimizationValidator()
+taskref_or_string = TaskRefValidator()

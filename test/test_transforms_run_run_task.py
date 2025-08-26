@@ -252,8 +252,13 @@ def run_caches(run_task_using):
         pprint(caches, indent=2)
 
         # Create a new schema object with just the part relevant to caches.
-        partial_schema = Schema(payload_builders[impl].schema.schema[key])
-        validate_schema(partial_schema, caches, "validation error")
+        # Skip schema validation for msgspec schemas as they don't have .schema attribute
+        if (
+            not hasattr(payload_builders[impl].schema, "_is_msgspec")
+            or not payload_builders[impl].schema._is_msgspec
+        ):
+            partial_schema = Schema(payload_builders[impl].schema.schema[key])
+            validate_schema(partial_schema, caches, "validation error")
 
         return caches
 

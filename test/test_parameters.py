@@ -11,7 +11,6 @@ from unittest import TestCase, mock
 
 import mozilla_repo_urls
 import pytest
-from voluptuous import Optional, Required, Schema
 
 import taskgraph  # noqa: F401
 from taskgraph import parameters
@@ -21,6 +20,7 @@ from taskgraph.parameters import (
     extend_parameters_schema,
     load_parameters_file,
 )
+from taskgraph.util.schema import Optional, Required, Schema
 
 from .mockedopen import MockedOpen
 
@@ -274,6 +274,9 @@ def test_parameters_format_spec(spec, expected):
 
 
 def test_extend_parameters_schema(monkeypatch):
+    # Reset global _schema_extensions
+    monkeypatch.setattr(parameters, "_schema_extensions", [])
+
     monkeypatch.setattr(
         parameters,
         "base_schema",

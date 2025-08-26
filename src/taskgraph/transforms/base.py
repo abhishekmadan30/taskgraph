@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Union
 
+import msgspec
+
 from taskgraph.task import Task
 
 from ..config import GraphConfig
@@ -154,5 +156,9 @@ class ValidateSchema:
                 )
             else:
                 error = "In unknown task:"
-            validate_schema(self.schema, task, error)
+            # Check if schema is a msgspec.Struct type
+            use_msgspec = isinstance(self.schema, type) and issubclass(
+                self.schema, msgspec.Struct
+            )
+            validate_schema(self.schema, task, error, use_msgspec=use_msgspec)
             yield task

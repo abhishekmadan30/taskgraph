@@ -105,10 +105,8 @@ about the state of the tasks at given points. Here is an example:
 
 .. code-block:: python
 
-   from voluptuous import Optional, Required
-
    from taskgraph.transforms.base import TransformSequence
-   from taskgraph.util.schema import Schema
+   from taskgraph.util.schema import Optional, Required, Schema
 
    my_schema = Schema({
        Required("foo"): str,
