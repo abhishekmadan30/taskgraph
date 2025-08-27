@@ -34,8 +34,8 @@ class FetchesSchema(msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=
 
     artifact: str
     dest: TOptional[str] = None
-    extract: bool = True
-    verify_hash: bool = True
+    extract: bool = False
+    verify_hash: bool = False
 
 
 # When configuration using msgspec

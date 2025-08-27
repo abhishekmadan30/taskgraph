@@ -105,15 +105,17 @@ about the state of the tasks at given points. Here is an example:
 
 .. code-block:: python
 
+   import msgspec
+   from typing import Optional
    from taskgraph.transforms.base import TransformSequence
-   from taskgraph.util.schema import Optional, Required, Schema
+   from taskgraph.util.schema import Schema
 
-   my_schema = Schema({
-       Required("foo"): str,
-       Optional("bar"): bool,
-   })
+   class MySchema(msgspec.Struct, kw_only=True):
+       foo: str                   # Required field
+       bar: Optional[bool] = None # Optional field
 
-   transforms.add_validate(my_schema)
+   transforms = TransformSequence()
+   transforms.add_validate(Schema(MySchema))
 
 In the above example, we can be sure that every task dict has a string field
 called ``foo``, and may or may not have a boolean field called ``bar``.

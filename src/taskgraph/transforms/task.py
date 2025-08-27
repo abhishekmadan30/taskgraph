@@ -26,8 +26,6 @@ from taskgraph.transforms.base import TransformSequence
 from taskgraph.util.hash import hash_path
 from taskgraph.util.keyed_by import evaluate_keyed_by
 from taskgraph.util.schema import (
-    Optional,
-    Required,
     Schema,
     resolve_keyed_by,
     validate_schema,
@@ -200,17 +198,22 @@ def payload_builder(name, schema):
     """
     Decorator for registering payload builders.
 
-    Supports both dict schemas and msgspec.Struct types.
+    Requires msgspec.Struct schema types for type safety and performance.
     """
-    # Handle msgspec schemas
-    if isinstance(schema, type) and issubclass(schema, msgspec.Struct):
-        # Wrap msgspec schema in our compatibility Schema class
-        schema = Schema(schema)
-    else:
-        # Traditional dict schema - extend it with required fields
-        schema = Schema({Required("implementation"): name, Optional("os"): str}).extend(
-            schema
+    # Ensure we're using msgspec schemas
+    if not (isinstance(schema, type) and issubclass(schema, msgspec.Struct)):
+        raise TypeError(
+            f"payload_builder requires msgspec.Struct schema, got {type(schema).__name__}. "
+            f"Please migrate to msgspec: class {name.title()}Schema(msgspec.Struct): ..."
         )
+
+    # Verify the schema has required fields
+    fields = {f.name for f in msgspec.structs.fields(schema)}
+    if "implementation" not in fields:
+        raise ValueError(f"Schema for {name} must include 'implementation' field")
+
+    # Wrap msgspec schema in our compatibility Schema class
+    schema = Schema(schema)
 
     def wrap(func):
         assert name not in payload_builders, f"duplicate payload builder name {name}"

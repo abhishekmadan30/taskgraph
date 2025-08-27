@@ -136,14 +136,17 @@ comments for explanations):
 
 .. code-block:: python
 
-   from taskgraph.util.schema import Optional, Required, Schema
+   import msgspec
+   from typing import Optional
+   from taskgraph.util.schema import Schema
    from taskgraph.transforms.base import TransformSequence
 
-   # Define the schema. We use our schema validation to ensure correctness.
-   hello_description_schema = Schema({
-       Required("text"): str,
-       Optional("description"): str,
-   })
+   # Define the schema using msgspec for better type checking and performance.
+   class HelloDescriptionSchema(msgspec.Struct, kw_only=True):
+       text: str                          # Required field
+       description: Optional[str] = None  # Optional field
+
+   hello_description_schema = Schema(HelloDescriptionSchema)
 
    # Create a 'TransformSequence' instance. This class collects transform
    # functions to run later.
