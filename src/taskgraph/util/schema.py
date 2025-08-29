@@ -5,6 +5,8 @@
 
 import pprint
 from typing import List
+import re
+from collections.abc import Mapping
 
 import msgspec
 
@@ -190,6 +192,7 @@ EXCEPTED_SCHEMA_IDENTIFIERS = [
     "upstream-artifacts",
     "artifact-map",
 ]
+
 
 
 class Schema(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):
