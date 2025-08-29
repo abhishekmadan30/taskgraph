@@ -18,15 +18,14 @@ from taskgraph.transforms.run.common import (
 )
 from taskgraph.util import path as mozpath
 from taskgraph.util.hash import hash_paths
+from taskgraph.util.schema import Schema
 from taskgraph.util.shell import quote as shell_quote
 
 CACHE_TYPE = "toolchains.v3"
 
 
 #: Schema for run.using toolchain
-class ToolchainRunSchema(
-    msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"
-):
+class ToolchainRunSchema(Schema):
     """
     Schema for toolchain-script run configuration.
 
@@ -49,11 +48,14 @@ class ToolchainRunSchema(
         workdir: Base work directory used to set up the task.
     """
 
+    # Required fields first
     using: Literal["toolchain-script"]
     script: str
     sparse_profile: Optional[str]  # Can be None to skip sparse profile
     toolchain_artifact: str
     workdir: str
+
+    # Optional fields
     arguments: Optional[List[str]] = None
     resources: Optional[List[str]] = None
     toolchain_alias: Optional[Union[str, List[str]]] = None

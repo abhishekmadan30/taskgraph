@@ -10,7 +10,6 @@ from base64 import b64decode
 from unittest import TestCase, mock
 
 import mozilla_repo_urls
-import msgspec
 import pytest
 
 import taskgraph  # noqa: F401
@@ -21,6 +20,7 @@ from taskgraph.parameters import (
     extend_parameters_schema,
     load_parameters_file,
 )
+from taskgraph.util.schema import Schema
 
 from .mockedopen import MockedOpen
 
@@ -277,7 +277,7 @@ def test_extend_parameters_schema(monkeypatch):
     """Test parameter extension with msgspec schemas."""
 
     # Define a test schema that extends the base schema
-    class ExtendedSchema(msgspec.Struct, kw_only=True, rename="kebab"):
+    class ExtendedSchema(Schema):
         foo: str
         bar: bool = False  # Optional with default
 

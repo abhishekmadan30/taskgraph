@@ -136,17 +136,16 @@ comments for explanations):
 
 .. code-block:: python
 
-   import msgspec
    from typing import Optional
    from taskgraph.util.schema import Schema
    from taskgraph.transforms.base import TransformSequence
 
-   # Define the schema using msgspec for better type checking and performance.
-   class HelloDescriptionSchema(msgspec.Struct, kw_only=True):
+   # Define the schema using Schema base class for better type checking and performance.
+   class HelloDescriptionSchema(Schema):
        text: str                          # Required field
        description: Optional[str] = None  # Optional field
 
-   hello_description_schema = Schema(HelloDescriptionSchema)
+   hello_description_schema = HelloDescriptionSchema
 
    # Create a 'TransformSequence' instance. This class collects transform
    # functions to run later.

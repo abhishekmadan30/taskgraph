@@ -3,11 +3,12 @@ from typing import Any, Dict, List, Optional, Union
 import msgspec
 
 from taskgraph.transforms.base import TransformSequence
+from taskgraph.util.schema import Schema
 from taskgraph.util.templates import deep_get, substitute_task_fields
 from taskgraph.util.yaml import load_yaml
 
 
-class TaskContextConfig(msgspec.Struct, kw_only=True, rename="kebab"):
+class TaskContextConfig(Schema):
     """
     `task-context` can be used to substitute values into any field in a
     task with data that is not known until `taskgraph` runs.
@@ -30,6 +31,12 @@ class TaskContextConfig(msgspec.Struct, kw_only=True, rename="kebab"):
     That is to say: parameters will always override anything else.
     """
 
+    # Required field first
+    # A list of fields in the task to substitute the provided values
+    # into.
+    substitution_fields: List[str]
+
+    # Optional fields
     # Retrieve task context values from parameters. A single
     # parameter may be provided or a list of parameters in
     # priority order. The latter can be useful in implementing a
@@ -42,19 +49,19 @@ class TaskContextConfig(msgspec.Struct, kw_only=True, rename="kebab"):
     from_file: Optional[str] = None
     # Key/value pairs to be used as task context
     from_object: Optional[Any] = None
-    # A list of fields in the task to substitute the provided values
-    # into.
-    substitution_fields: List[str]
 
 
 #: Schema for the task_context transforms
-class Schema(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):
-    name: Optional[str] = None
+class TaskContextSchema(Schema):
+    # Required field first
     task_context: TaskContextConfig
+
+    # Optional fields
+    name: Optional[str] = None
     __extras__: Dict[str, Any] = msgspec.field(default_factory=dict)
 
 
-SCHEMA = Schema
+SCHEMA = TaskContextSchema
 
 transforms = TransformSequence()
 transforms.add_validate(SCHEMA)

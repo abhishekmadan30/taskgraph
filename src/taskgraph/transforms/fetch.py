@@ -17,6 +17,7 @@ import taskgraph
 
 from ..util import path
 from ..util.cached_tasks import add_optimization
+from ..util.schema import Schema
 from ..util.treeherder import join_symbol
 from .base import TransformSequence
 
@@ -24,14 +25,14 @@ CACHE_TYPE = "content.v1"
 
 
 #: Schema for fetch transforms
-class FetchConfig(msgspec.Struct, kw_only=True):
+class FetchConfig(Schema, rename=None, omit_defaults=False):
     """Configuration for a fetch task type."""
 
     type: str
     # Additional fields handled dynamically by fetch builders
 
 
-class FetchSchema(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):
+class FetchSchema(Schema):
     """
     Schema for fetch transforms.
 
@@ -199,7 +200,7 @@ def make_task(config, tasks):
         yield task_desc
 
 
-class GPGSignatureConfig(msgspec.Struct, kw_only=True, rename="kebab"):
+class GPGSignatureConfig(Schema):
     """GPG signature verification configuration."""
 
     # URL where GPG signature document can be obtained. Can contain the
@@ -209,9 +210,7 @@ class GPGSignatureConfig(msgspec.Struct, kw_only=True, rename="kebab"):
     key_path: str
 
 
-class StaticUrlFetchConfig(
-    msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"
-):
+class StaticUrlFetchConfig(Schema, rename="kebab"):
     """Configuration for static-url fetch type."""
 
     type: str
@@ -303,7 +302,7 @@ def create_fetch_url_task(config, name, fetch):
     }
 
 
-class GitFetchConfig(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):
+class GitFetchConfig(Schema):
     """Configuration for git fetch type."""
 
     type: str

@@ -7,12 +7,11 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
-import msgspec
-
 import taskgraph
 from taskgraph.transforms.base import TransformSequence
 from taskgraph.util import json
 from taskgraph.util.docker import create_context_tar, generate_context_hash
+from taskgraph.util.schema import Schema
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +29,7 @@ transforms = TransformSequence()
 
 
 #: Schema for docker_image transforms
-class DockerImageSchema(
-    msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"
-):
+class DockerImageSchema(Schema):
     """
     Schema for docker_image transforms.
 
@@ -49,7 +46,10 @@ class DockerImageSchema(
         cache: Whether this image should be cached based on inputs.
     """
 
+    # Required field first
     name: str
+
+    # Optional fields
     parent: Optional[str] = None
     symbol: Optional[str] = None
     task_from: Optional[str] = None

@@ -57,9 +57,7 @@ class TaskDescriptionTreeherder(Schema, rename=None):
     platform: TOptional[str] = None
 
 
-class TaskDescriptionIndex(
-    msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True
-):
+class TaskDescriptionIndex(Schema, rename="kebab"):
     """Index information for a task."""
 
     # the name of the product this build produces
@@ -202,7 +200,7 @@ def payload_builder(name, schema):
     if not (isinstance(schema, type) and issubclass(schema, msgspec.Struct)):
         raise TypeError(
             f"payload_builder requires msgspec.Struct schema, got {type(schema).__name__}. "
-            f"Please migrate to msgspec: class {name.title()}Schema(msgspec.Struct): ..."
+            f"Please migrate to msgspec: class {name.title()}Schema(Schema): ..."
         )
 
     # Verify the schema has required fields
@@ -244,17 +242,15 @@ def verify_index(config, index):
 
 
 # Docker Worker schema using msgspec
-class DockerWorkerCacheConfig(
-    msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True
-):
+class DockerWorkerCacheConfig(Schema, rename="kebab"):
     """Cache configuration for docker-worker."""
 
-    # only one type is supported by any of the workers right now
-    type: Literal["persistent"] = "persistent"
     # name of the cache, allowing reuse by subsequent tasks naming the same cache
     name: str
     # location in the task image where the cache will be mounted
     mount_point: str
+    # only one type is supported by any of the workers right now
+    type: Literal["persistent"] = "persistent"
     # Whether the cache is not used in untrusted environments (like the Try repo).
     skip_untrusted: bool = False
 
@@ -536,9 +532,7 @@ class GenericWorkerArtifactConfig(Schema, rename=None):
     name: TOptional[str] = None
 
 
-class GenericWorkerMountContent(
-    msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True
-):
+class GenericWorkerMountContent(Schema, rename="kebab"):
     """Mount content configuration for generic-worker."""
 
     # Artifact name that contains the content.
@@ -549,9 +543,7 @@ class GenericWorkerMountContent(
     url: TOptional[str] = None
 
 
-class GenericWorkerMountConfig(
-    msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True
-):
+class GenericWorkerMountConfig(Schema, rename="kebab"):
     """Mount configuration for generic-worker."""
 
     # A unique name for the cache volume, implies writable cache directory

@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 import msgspec
 
 from taskgraph.transforms.base import TransformSequence
-from taskgraph.util.schema import resolve_keyed_by
+from taskgraph.util.schema import Schema, resolve_keyed_by
 
 StatusType = Literal[
     "on-completed",
@@ -26,7 +26,7 @@ StatusType = Literal[
 ]
 
 
-class EmailRecipient(msgspec.Struct, kw_only=True, rename="kebab"):
+class EmailRecipient(Schema):
     """Email notification recipient."""
 
     type: Literal["email"]
@@ -34,7 +34,7 @@ class EmailRecipient(msgspec.Struct, kw_only=True, rename="kebab"):
     status_type: Optional[StatusType] = None
 
 
-class MatrixRoomRecipient(msgspec.Struct, kw_only=True, rename="kebab"):
+class MatrixRoomRecipient(Schema):
     """Matrix room notification recipient."""
 
     type: Literal["matrix-room"]
@@ -42,7 +42,7 @@ class MatrixRoomRecipient(msgspec.Struct, kw_only=True, rename="kebab"):
     status_type: Optional[StatusType] = None
 
 
-class PulseRecipient(msgspec.Struct, kw_only=True, rename="kebab"):
+class PulseRecipient(Schema):
     """Pulse notification recipient."""
 
     type: Literal["pulse"]
@@ -50,7 +50,7 @@ class PulseRecipient(msgspec.Struct, kw_only=True, rename="kebab"):
     status_type: Optional[StatusType] = None
 
 
-class SlackChannelRecipient(msgspec.Struct, kw_only=True, rename="kebab"):
+class SlackChannelRecipient(Schema):
     """Slack channel notification recipient."""
 
     type: Literal["slack-channel"]
@@ -71,14 +71,14 @@ _route_keys = {
 """Map each type to its primary key that will be used in the route."""
 
 
-class EmailLink(msgspec.Struct, kw_only=True):
+class EmailLink(Schema, rename=None, omit_defaults=False):
     """Email link configuration."""
 
     text: str
     href: str
 
 
-class EmailContent(msgspec.Struct, kw_only=True, omit_defaults=True):
+class EmailContent(Schema, rename=None):
     """Email notification content."""
 
     subject: Optional[str] = None
@@ -86,7 +86,7 @@ class EmailContent(msgspec.Struct, kw_only=True, omit_defaults=True):
     link: Optional[EmailLink] = None
 
 
-class MatrixContent(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):
+class MatrixContent(Schema):
     """Matrix notification content."""
 
     body: Optional[str] = None
@@ -95,7 +95,7 @@ class MatrixContent(msgspec.Struct, kw_only=True, omit_defaults=True, rename="ke
     msg_type: Optional[str] = None
 
 
-class SlackContent(msgspec.Struct, kw_only=True, omit_defaults=True):
+class SlackContent(Schema, rename=None):
     """Slack notification content."""
 
     text: Optional[str] = None
@@ -103,7 +103,7 @@ class SlackContent(msgspec.Struct, kw_only=True, omit_defaults=True):
     attachments: Optional[List[Any]] = None
 
 
-class NotifyContent(msgspec.Struct, kw_only=True, omit_defaults=True):
+class NotifyContent(Schema, rename=None):
     """Notification content configuration."""
 
     email: Optional[EmailContent] = None
@@ -111,16 +111,14 @@ class NotifyContent(msgspec.Struct, kw_only=True, omit_defaults=True):
     slack: Optional[SlackContent] = None
 
 
-class NotifyConfig(msgspec.Struct, kw_only=True, omit_defaults=True):
+class NotifyConfig(Schema, rename=None):
     """Modern notification configuration."""
 
     recipients: List[Dict[str, Any]]  # Will be validated as Recipient union
     content: Optional[NotifyContent] = None
 
 
-class LegacyNotificationsConfig(
-    msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"
-):
+class LegacyNotificationsConfig(Schema, rename="kebab"):
     """Legacy notification configuration for backwards compatibility."""
 
     emails: Union[List[str], Dict[str, Any]]  # Can be keyed-by
@@ -130,9 +128,7 @@ class LegacyNotificationsConfig(
 
 
 #: Schema for notify transforms
-class NotifySchema(
-    msgspec.Struct, kw_only=True, omit_defaults=True, tag_field="notify_type"
-):
+class NotifySchema(Schema, tag_field="notify_type"):
     """Schema for notify transforms.
 
     Note: This schema allows either 'notify' or 'notifications' field,

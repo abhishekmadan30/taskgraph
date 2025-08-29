@@ -20,19 +20,19 @@ import msgspec
 from taskgraph.transforms.base import TransformSequence
 from taskgraph.util.attributes import attrmatch
 from taskgraph.util.dependencies import GROUP_BY_MAP, get_dependencies
-from taskgraph.util.schema import validate_schema
+from taskgraph.util.schema import Schema, validate_schema
 from taskgraph.util.set_name import SET_NAME_MAP
 
 
 # Define FetchEntry for the fetches field
-class FetchEntry(msgspec.Struct, kw_only=True, omit_defaults=True):
+class FetchEntry(Schema, rename=None):
     """A fetch entry for an artifact."""
 
     artifact: str
     dest: Optional[str] = None
 
 
-class FromDepsConfig(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):
+class FromDepsConfig(Schema):
     """
     Configuration for from-deps transforms.
 
@@ -94,7 +94,7 @@ class FromDepsConfig(msgspec.Struct, kw_only=True, omit_defaults=True, rename="k
 
 
 #: Schema for from_deps transforms
-class FromDepsSchema(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):
+class FromDepsSchema(Schema):
     """Schema for from_deps transforms."""
 
     from_deps: FromDepsConfig

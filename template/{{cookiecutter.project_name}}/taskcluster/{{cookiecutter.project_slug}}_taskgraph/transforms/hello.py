@@ -1,14 +1,12 @@
-import msgspec
-
 from taskgraph.transforms.base import TransformSequence
 from taskgraph.util.schema import Schema
 
 
-class HelloSchema(msgspec.Struct, kw_only=True):
+class HelloSchema(Schema):
     noun: str  # Required field
 
 
-HELLO_SCHEMA = Schema(HelloSchema)
+HELLO_SCHEMA = HelloSchema
 
 transforms = TransformSequence()
 transforms.add_validate(HELLO_SCHEMA)

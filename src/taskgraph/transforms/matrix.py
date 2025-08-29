@@ -13,10 +13,11 @@ from typing import Any, Dict, List, Optional
 import msgspec
 
 from taskgraph.transforms.base import TransformSequence
+from taskgraph.util.schema import Schema
 from taskgraph.util.templates import substitute_task_fields
 
 
-class MatrixConfig(msgspec.Struct, kw_only=True, rename="kebab"):
+class MatrixConfig(Schema):
     """
     Matrix configuration for generating multiple tasks.
     """
@@ -43,7 +44,7 @@ class MatrixConfig(msgspec.Struct, kw_only=True, rename="kebab"):
 
 
 #: Schema for matrix transforms
-class MatrixSchema(msgspec.Struct, kw_only=True, omit_defaults=True):
+class MatrixSchema(Schema):
     name: str
     matrix: Optional[MatrixConfig] = None
     __extras__: Dict[str, Any] = msgspec.field(default_factory=dict)

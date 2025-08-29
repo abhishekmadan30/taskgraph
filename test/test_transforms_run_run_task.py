@@ -251,8 +251,6 @@ def run_caches(run_task_using):
         print("Dumping for copy/paste:")
         pprint(caches, indent=2)
 
-        # Skip validation as all schemas are now msgspec.Struct types
-        # and partial schema validation is not needed
         return caches
 
     return inner
