@@ -175,8 +175,8 @@ def extend_parameters_schema(schema, defaults_fn=None):
     # Store the extension schema for use during validation
     _schema_extensions.append(schema)
 
-    # Schema extension is no longer supported with msgspec.Struct inheritance
-    # Extensions are tracked in _schema_extensions list instead
+    # With msgspec, schema extensions are tracked in the _schema_extensions list
+    # for validation purposes rather than being merged into a single schema
 
     if defaults_fn:
         defaults_functions.append(defaults_fn)
@@ -240,92 +240,39 @@ class Parameters(ReadOnlyDict):
         return kwargs
 
     def check(self):
-        # For msgspec schemas, we need to validate differently
-        if isinstance(base_schema, type) and issubclass(base_schema, msgspec.Struct):
-            try:
-                # Convert underscore keys to kebab-case for msgspec validation
-                params = self.copy()
-                # BaseSchema uses kebab-case (rename="kebab"), so we need to convert keys
-                kebab_params = {}
-                for k, v in params.items():
-                    # Convert underscore to kebab-case
-                    kebab_key = k.replace("_", "-")
-                    kebab_params[kebab_key] = v
+        # Validate parameters using msgspec schema
+        try:
+            # Convert underscore keys to kebab-case since BaseSchema uses rename="kebab"
+            kebab_params = {k.replace("_", "-"): v for k, v in self.items()}
 
-                # Handle extensions if present
-                global _schema_extensions
-                for ext_schema in _schema_extensions:
-                    if isinstance(ext_schema, dict):
-                        # Simple dict validation - just check if required keys exist
-                        for key in ext_schema:
-                            # Just skip validation of extensions for now
-                            pass
+            if self.strict:
+                # Strict mode: validate against schema and check for extra fields
+                # Get all valid field names from the base schema
+                schema_fields = {
+                    f.encode_name for f in msgspec.structs.fields(base_schema)
+                }
 
-                if self.strict:
-                    # Strict validation with msgspec
-                    # First check for extra fields
-                    schema_fields = {
-                        f.encode_name for f in msgspec.structs.fields(base_schema)
-                    }
+                # Check for extra fields
+                extra_fields = set(kebab_params.keys()) - schema_fields
+                if extra_fields:
+                    raise ParameterMismatch(
+                        f"Invalid parameters: Extra fields not allowed: {extra_fields}"
+                    )
 
-                    # Add extension fields if present
-                    for ext_schema in _schema_extensions:
-                        if isinstance(ext_schema, dict):
-                            for key in ext_schema.keys():
-                                # Extract field name
-                                if hasattr(key, "key"):
-                                    field_name = key.key.replace("_", "-")
-                                else:
-                                    field_name = str(key).replace("_", "-")
-                                schema_fields.add(field_name)
-
-                    extra_fields = set(kebab_params.keys()) - schema_fields
-                    if extra_fields:
-                        raise ParameterMismatch(
-                            f"Invalid parameters: Extra fields not allowed: {extra_fields}"
-                        )
-                    # Now validate the base schema fields
-                    base_fields = {
-                        f.encode_name for f in msgspec.structs.fields(base_schema)
-                    }
-                    base_params = {
-                        k: v for k, v in kebab_params.items() if k in base_fields
-                    }
-                    msgspec.convert(base_params, base_schema)
-                else:
-                    # Non-strict: validate only the fields that exist in the schema
-                    # Filter to only schema fields
-                    schema_fields = {
-                        f.encode_name for f in msgspec.structs.fields(base_schema)
-                    }
-                    filtered_params = {
-                        k: v for k, v in kebab_params.items() if k in schema_fields
-                    }
-                    msgspec.convert(filtered_params, base_schema)
-            except (msgspec.ValidationError, msgspec.DecodeError) as e:
-                raise ParameterMismatch(f"Invalid parameters: {e}")
-        else:
-            # For non-msgspec schemas, validate using the Schema class
-            from taskgraph.util.schema import validate_schema  # noqa: PLC0415
-
-            try:
-                if self.strict:
-                    validate_schema(base_schema, self.copy(), "Invalid parameters:")
-                else:
-                    # In non-strict mode, allow extra fields
-                    if hasattr(base_schema, "allow_extra"):
-                        original_allow_extra = base_schema.allow_extra
-                        base_schema.allow_extra = True
-                        try:
-                            validate_schema(
-                                base_schema, self.copy(), "Invalid parameters:"
-                            )
-                        finally:
-                            base_schema.allow_extra = original_allow_extra
-                    else:
-                        validate_schema(base_schema, self.copy(), "Invalid parameters:")
-            except Exception as e:
-                raise ParameterMismatch(str(e))
+                # Validate all parameters against the schema
+                msgspec.convert(kebab_params, base_schema)
+            else:
+                # Non-strict mode: only validate fields that exist in the schema
+                # Filter to only include fields defined in the schema
+                schema_fields = {
+                    f.encode_name for f in msgspec.structs.fields(base_schema)
+                }
+                filtered_params = {
+                    k: v for k, v in kebab_params.items() if k in schema_fields
+                }
+                msgspec.convert(filtered_params, base_schema)
+        except (msgspec.ValidationError, msgspec.DecodeError) as e:
+            raise ParameterMismatch(f"Invalid parameters: {e}")
 
     def __getitem__(self, k):
         try:

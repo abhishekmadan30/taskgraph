@@ -33,32 +33,29 @@ class FetchConfig(Schema, rename=None, omit_defaults=False):
 
 
 class FetchSchema(Schema):
-    """
-    Schema for fetch transforms.
-
-    Attributes:
-        name: Name of the task.
-        task_from: Relative path (from config.path) to the file the task was defined in.
-        description: Description of the task.
-        expires_after: When the task expires.
-        docker_image: Docker image configuration.
-        fetch_alias: An alias that can be used instead of the real fetch task name in
-                    fetch stanzas for tasks.
-        artifact_prefix: The prefix of the taskcluster artifact being uploaded.
-                        Defaults to `public/`; if it starts with something other than
-                        `public/` the artifact will require scopes to access.
-        attributes: Task attributes.
-        fetch: Fetch configuration with type and additional fields.
-    """
-
+    # Required fields
+    # Name of the task.
     name: str
+    # Description of the task.
     description: str
+    # Fetch configuration with type and additional fields.
     fetch: Dict[str, Any]  # Must have 'type' key, other keys depend on type
+
+    # Optional fields
+    # Relative path (from config.path) to the file the task was defined in.
     task_from: Optional[str] = None
+    # When the task expires.
     expires_after: Optional[str] = None
+    # Docker image configuration.
     docker_image: Optional[Any] = None
+    # An alias that can be used instead of the real fetch task name in
+    # fetch stanzas for tasks.
     fetch_alias: Optional[str] = None
+    # The prefix of the taskcluster artifact being uploaded.
+    # Defaults to `public/`; if it starts with something other than
+    # `public/` the artifact will require scopes to access.
     artifact_prefix: Optional[str] = None
+    # Task attributes.
     attributes: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):

@@ -24,7 +24,6 @@ from taskgraph.util.schema import Schema, validate_schema
 from taskgraph.util.set_name import SET_NAME_MAP
 
 
-# Define FetchEntry for the fetches field
 class FetchEntry(Schema, rename=None):
     """A fetch entry for an artifact."""
 
@@ -33,40 +32,36 @@ class FetchEntry(Schema, rename=None):
 
 
 class FromDepsConfig(Schema):
-    """
-    Configuration for from-deps transforms.
-
-    Attributes:
-        kinds: Limit dependencies to specified kinds (defaults to all kinds in
-              `kind-dependencies`). The first kind in the list is the "primary" kind.
-              The dependency of this kind will be used to derive the label
-              and copy attributes (if `copy-attributes` is True).
-        set_name: UPDATE ME AND DOCS. Can be a string from SET_NAME_MAP, False, None,
-                 or a dict with a SET_NAME_MAP key.
-        with_attributes: Limit dependencies to tasks whose attributes match
-                        using :func:`~taskgraph.util.attributes.attrmatch`.
-        group_by: Group cross-kind dependencies using the given group-by
-                 function. One task will be created for each group. If not
-                 specified, the 'single' function will be used which creates
-                 a new task for each individual dependency.
-        copy_attributes: If True, copy attributes from the dependency matching the
-                        first kind in the `kinds` list (whether specified explicitly
-                        or taken from `kind-dependencies`).
-        unique_kinds: If true (the default), there must be only a single unique task
-                     for each kind in a dependency group. Setting this to false
-                     disables that requirement.
-        fetches: If present, a `fetches` entry will be added for each task
-                dependency. Attributes of the upstream task may be used as
-                substitution values in the `artifact` or `dest` values of the
-                `fetches` entry.
-    """
-
+    # Optional fields
+    # Limit dependencies to specified kinds (defaults to all kinds in
+    # `kind-dependencies`).
+    #
+    # The first kind in the list is the "primary" kind. The
+    # dependency of this kind will be used to derive the label
+    # and copy attributes (if `copy-attributes` is True).
     kinds: Optional[List[str]] = None
+    # UPDATE ME AND DOCS
     set_name: Optional[Union[str, bool, Dict[str, Any]]] = None
+    # Limit dependencies to tasks whose attributes match
+    # using :func:`~taskgraph.util.attributes.attrmatch`.
     with_attributes: Optional[Dict[str, Union[List[Any], str]]] = None
+    # Group cross-kind dependencies using the given group-by
+    # function. One task will be created for each group. If not
+    # specified, the 'single' function will be used which creates
+    # a new task for each individual dependency.
     group_by: Optional[Union[str, Dict[str, Any]]] = None
+    # If True, copy attributes from the dependency matching the
+    # first kind in the `kinds` list (whether specified explicitly
+    # or taken from `kind-dependencies`).
     copy_attributes: Optional[bool] = None
+    # If true (the default), there must be only a single unique task
+    # for each kind in a dependency group. Setting this to false
+    # disables that requirement.
     unique_kinds: Optional[bool] = None
+    # If present, a `fetches` entry will be added for each task
+    # dependency. Attributes of the upstream task may be used as
+    # substitution values in the `artifact` or `dest` values of the
+    # `fetches` entry.
     fetches: Optional[Dict[str, List[Union[str, Dict[str, str]]]]] = None
 
     def __post_init__(self):

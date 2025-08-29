@@ -26,45 +26,47 @@ CACHE_TYPE = "toolchains.v3"
 
 #: Schema for run.using toolchain
 class ToolchainRunSchema(Schema):
-    """
-    Schema for toolchain-script run configuration.
-
-    Attributes:
-        using: Specifies the run type. Must be "toolchain-script".
-        script: The script (in taskcluster/scripts/misc) to run.
-        arguments: Arguments to pass to the script.
-        sparse_profile: Sparse profile to give to checkout using `run-task`. If given,
-                       a filename in `build/sparse-profiles`. Defaults to
-                       "toolchain-build", i.e., to
-                       `build/sparse-profiles/toolchain-build`. If `None`, instructs
-                       `run-task` to not use a sparse profile at all.
-        resources: Paths/patterns pointing to files that influence the outcome of
-                  a toolchain build.
-        toolchain_artifact: Path to the artifact produced by the toolchain task.
-        toolchain_alias: An alias that can be used instead of the real toolchain task name in
-                        fetch stanzas for tasks.
-        toolchain_env: Additional env variables to add to the worker when using this
-                      toolchain.
-        workdir: Base work directory used to set up the task.
-    """
-
     # Required fields first
+
+    # Specifies the run type. Must be "toolchain-script".
     using: Literal["toolchain-script"]
+    # The script (in taskcluster/scripts/misc) to run.
     script: str
+
+    # Sparse profile to give to checkout using `run-task`. If given,
+    # a filename in `build/sparse-profiles`. Defaults to
+    # "toolchain-build", i.e., to
+    # `build/sparse-profiles/toolchain-build`. If `None`, instructs
+    # `run-task` to not use a sparse profile at all.
     sparse_profile: Optional[str]  # Can be None to skip sparse profile
+
+    # Path to the artifact produced by the toolchain task.
     toolchain_artifact: str
+
+    # Base work directory used to set up the task.
     workdir: str
 
     # Optional fields
+
+    # Arguments to pass to the script.
     arguments: Optional[List[str]] = None
+
+    # Paths/patterns pointing to files that influence the outcome of
+    # a toolchain build.
     resources: Optional[List[str]] = None
+
+    # An alias that can be used instead of the real toolchain task name in
+    # fetch stanzas for tasks.
     toolchain_alias: Optional[Union[str, List[str]]] = None
+
+    # Additional env variables to add to the worker when using this
+    # toolchain.
     toolchain_env: Optional[Dict[str, Any]] = None
+
     # Allow extra fields
     _extra: Optional[Dict[str, Any]] = msgspec.field(default=None, name="")
 
 
-# Backward compatibility
 toolchain_run_schema = ToolchainRunSchema
 
 

@@ -65,8 +65,13 @@ class RunDescriptionSchema(Schema):
     worker_type: str
 
     # Optional fields
-    # Task naming
+    # The name of the task. At least one of 'name' or 'label' must be
+    # specified. If 'label' is not provided, it will be generated from
+    # the 'name' by prepending the kind.
     name: TOptional[str] = None
+    # The label of the task. At least one of 'name' or 'label' must be
+    # specified. If 'label' is not provided, it will be generated from
+    # the 'name' by prepending the kind.
     label: TOptional[str] = None
 
     # Optional fields from task description

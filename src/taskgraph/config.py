@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 import msgspec
 
 from .util.python_path import find_object
-from .util.schema import Schema, validate_schema
+from .util.schema import Schema, optionally_keyed_by, validate_schema
 from .util.vcs import get_repository
 from .util.yaml import load_yaml
 
@@ -29,10 +29,24 @@ TaskPriority = Literal[
 class WorkerAlias(Schema):
     """Worker alias configuration."""
 
-    provisioner: Union[str, dict]
+    provisioner: Union[str, dict]  # Can be keyed-by level
     implementation: str
     os: str
-    worker_type: Union[str, dict]  # Can be keyed-by, maps from "worker-type"
+    worker_type: Union[str, dict]  # Can be keyed-by level, maps from "worker-type"
+
+    def __post_init__(self):
+        """Validate keyed-by fields."""
+        # Validate provisioner can be keyed-by level
+        if isinstance(self.provisioner, dict):
+            validator = optionally_keyed_by("level", str)
+            # Just validate - it will raise an error if invalid
+            validator(self.provisioner)
+
+        # Validate worker_type can be keyed-by level
+        if isinstance(self.worker_type, dict):
+            validator = optionally_keyed_by("level", str)
+            # Just validate - it will raise an error if invalid
+            validator(self.worker_type)
 
 
 class Workers(Schema, rename=None):
@@ -82,18 +96,47 @@ class GraphConfigSchema(Schema):
     trust_domain: str  # Maps from "trust-domain"
     task_priority: Union[
         TaskPriority, dict
-    ]  # Maps from "task-priority", can be keyed-by
+    ]  # Maps from "task-priority", can be keyed-by project or level
     workers: Workers
     taskgraph: TaskGraphConfig
 
     # Optional fields
     docker_image_kind: Optional[str] = None  # Maps from "docker-image-kind"
     task_deadline_after: Optional[Union[str, dict]] = (
-        None  # Maps from "task-deadline-after", can be keyed-by
+        None  # Maps from "task-deadline-after", can be keyed-by project
     )
     task_expires_after: Optional[str] = None  # Maps from "task-expires-after"
     # Allow extra fields for flexibility
     __extras__: Dict[str, Any] = msgspec.field(default_factory=dict)
+
+    def __post_init__(self):
+        """Validate keyed-by fields."""
+        # Validate task_priority can be keyed-by project or level
+        if isinstance(self.task_priority, dict):
+            # Create a validator that accepts TaskPriority values
+            def validate_priority(x):
+                valid_priorities = [
+                    "highest",
+                    "very-high",
+                    "high",
+                    "medium",
+                    "low",
+                    "very-low",
+                    "lowest",
+                ]
+                if x not in valid_priorities:
+                    raise ValueError(f"Invalid task priority: {x}")
+                return x
+
+            validator = optionally_keyed_by("project", "level", validate_priority)
+            # Just validate - it will raise an error if invalid
+            validator(self.task_priority)
+
+        # Validate task_deadline_after can be keyed-by project
+        if self.task_deadline_after and isinstance(self.task_deadline_after, dict):
+            validator = optionally_keyed_by("project", str)
+            # Just validate - it will raise an error if invalid
+            validator(self.task_deadline_after)
 
 
 # Msgspec schema is now the main schema
