@@ -10,7 +10,7 @@ import pytest
 from taskgraph.transforms.run import make_task_description
 from taskgraph.transforms.task import payload_builders, set_defaults
 from taskgraph.util.caches import CACHES
-from taskgraph.util.schema import Schema, validate_schema
+from taskgraph.util.schema import validate_schema
 from taskgraph.util.templates import merge
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -251,15 +251,8 @@ def run_caches(run_task_using):
         print("Dumping for copy/paste:")
         pprint(caches, indent=2)
 
-        # Create a new schema object with just the part relevant to caches.
-        # Skip schema validation for msgspec schemas as they don't have .schema attribute
-        if (
-            not hasattr(payload_builders[impl].schema, "_is_msgspec")
-            or not payload_builders[impl].schema._is_msgspec
-        ):
-            partial_schema = Schema(payload_builders[impl].schema.schema[key])
-            validate_schema(partial_schema, caches, "validation error")
-
+        # Skip validation as all schemas are now msgspec.Struct types
+        # and partial schema validation is not needed
         return caches
 
     return inner

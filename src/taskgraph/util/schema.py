@@ -12,79 +12,29 @@ import taskgraph
 from taskgraph.util.keyed_by import evaluate_keyed_by, iter_dot_path
 
 
-class Any:
-    """Validator that accepts any of the provided values."""
-
-    def __init__(self, *validators):
-        self.validators = validators
-
-    def __call__(self, value):
-        for validator in self.validators:
-            if validator == value or (callable(validator) and validator(value)):
-                return value
-        raise ValueError(f"Value {value} not in allowed values: {self.validators}")
-
-
-class Required:
-    """Marks a field as required in a schema."""
-
-    def __init__(self, key):
-        self.key = key
-        self.schema = key  # For compatibility
-
-
-class Optional:
-    """Marks a field as optional in a schema."""
-
-    def __init__(self, key):
-        self.key = key
-        self.schema = key  # For compatibility
-
-
-def validate_schema(schema, obj, msg_prefix, use_msgspec=False):
+def validate_schema(schema, obj, msg_prefix):
     """
     Validate that object satisfies schema.  If not, generate a useful exception
     beginning with msg_prefix.
 
     Args:
-        schema: Either a Schema instance or msgspec.Struct type
+        schema: A msgspec.Struct type (including Schema subclasses)
         obj: Object to validate
         msg_prefix: Prefix for error messages
-        use_msgspec: If True, use msgspec for validation (default: False)
     """
     if taskgraph.fast:
         return
 
-    # Handle Schema instances
-    if isinstance(schema, Schema):
-        try:
-            schema(obj)
-        except Exception as exc:
-            raise Exception(f"{msg_prefix}\n{exc}\n{pprint.pformat(obj)}")
-        return
-
-    # Auto-detect msgspec schemas
-    if isinstance(schema, type) and issubclass(schema, msgspec.Struct):
-        use_msgspec = True
-
-    if use_msgspec:
-        # Handle msgspec validation
-        try:
-            if isinstance(schema, type) and issubclass(schema, msgspec.Struct):
-                # For msgspec.Struct types, validate by converting
-                msgspec.convert(obj, schema)
-            else:
-                # For other msgspec validators
-                schema.decode(msgspec.json.encode(obj))
-        except (msgspec.ValidationError, msgspec.DecodeError) as exc:
-            msg = [msg_prefix, str(exc)]
-            raise Exception("\n".join(msg) + "\n" + pprint.pformat(obj))
-    else:
-        # Try to call the schema as a validator
-        try:
-            schema(obj)
-        except Exception as exc:
-            raise Exception(f"{msg_prefix}\n{exc}\n{pprint.pformat(obj)}")
+    try:
+        if isinstance(schema, type) and issubclass(schema, Schema):
+            # Use the validate class method for Schema subclasses
+            schema.validate(obj)
+        elif isinstance(schema, type) and issubclass(schema, msgspec.Struct):
+            msgspec.convert(obj, schema)
+        else:
+            raise TypeError(f"Unsupported schema type: {type(schema)}")
+    except (msgspec.ValidationError, msgspec.DecodeError, Exception) as exc:
+        raise Exception(f"{msg_prefix}\n{str(exc)}\n{pprint.pformat(obj)}")
 
 
 def optionally_keyed_by(*arguments):
@@ -120,8 +70,8 @@ def optionally_keyed_by(*arguments):
                 # Unknown by-field
                 raise ValueError(f"Unknown key {k}")
         # Validate against the schema
-        if isinstance(schema, Schema):
-            return schema(obj)
+        if isinstance(schema, type) and issubclass(schema, Schema):
+            return schema.validate(obj)
         elif schema is str:
             # String validation
             if not isinstance(obj, str):
@@ -242,180 +192,53 @@ EXCEPTED_SCHEMA_IDENTIFIERS = [
 ]
 
 
-class Schema:
+class Schema(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):
     """
-    A schema validator that wraps msgspec.Struct types.
+    Base schema class that extends msgspec.Struct.
 
-    This provides a consistent interface for schema validation across the codebase.
+    This allows schemas to be defined directly as:
+
+        class MySchema(Schema):
+            foo: str
+            bar: int = 10
+
+    Instead of wrapping msgspec.Struct types.
+    Most schemas use kebab-case renaming by default.
     """
 
-    def __init__(self, schema, check=True, **kwargs):
-        # Check if schema is a msgspec.Struct type
-        if isinstance(schema, type) and issubclass(schema, msgspec.Struct):
-            self._msgspec_schema = schema
-            self._is_msgspec = True
-        elif isinstance(schema, dict):
-            # Legacy dict schema - convert to a simple validator
-            self._msgspec_schema = None
-            self._is_msgspec = False
-            self._dict_schema = schema
-        else:
-            # Assume it's a callable validator
-            self._msgspec_schema = None
-            self._is_msgspec = False
-            self._validator = schema
-
-        self.check = check
-        self.schema = schema  # Store original schema for compatibility
-        self._extensions = []
-        self.allow_extra = False  # By default, don't allow extra keys
-
-    def extend(self, *args, **kwargs):
-        """Extend the schema. For msgspec schemas, this stores extensions separately."""
-        if self._is_msgspec:
-            # For msgspec schemas, store extensions for validation time
-            self._extensions.extend(args)
-            return self
-        elif hasattr(self, "_dict_schema"):
-            # For dict schemas, create a new Schema with the combined schemas
-            new_schema = self._dict_schema.copy()
-            for arg in args:
-                if isinstance(arg, dict):
-                    new_schema.update(arg)
-            # Handle extra parameter
-            allow_extra = kwargs.get("extra") is not None
-            new_instance = Schema(new_schema)
-            new_instance.allow_extra = allow_extra
-            return new_instance
-        # For other schemas, just return self
-        return self
-
-    def _validate_msgspec(self, data):
-        """Validate data against the msgspec schema."""
-        try:
-            return msgspec.convert(data, self._msgspec_schema)
-        except (msgspec.ValidationError, msgspec.DecodeError) as e:
-            raise Exception(str(e))
-
-    def __call__(self, data):
-        """Validate data against the schema."""
+    @classmethod
+    def validate(cls, data):
+        """Validate data against this schema."""
         if taskgraph.fast:
             return data
 
-        if self._is_msgspec:
-            return self._validate_msgspec(data)
-        elif hasattr(self, "_dict_schema"):
-            # Simple dict validation
-            if not isinstance(data, dict):
-                raise Exception(f"Expected dict, got {type(data).__name__}")
-
-            # Collect valid keys
-            valid_keys = set()
-            for key in self._dict_schema.keys():
-                if hasattr(key, "key"):
-                    valid_keys.add(key.key)
-                else:
-                    valid_keys.add(key)
-
-            # Check for extra keys (strict mode by default for dict schemas)
-            extra_keys = set(data.keys()) - valid_keys
-            if extra_keys and not getattr(self, "allow_extra", False):
-                raise Exception(f"Extra keys not allowed: {extra_keys}")
-
-            # Validate required keys and values
-            for key, validator in self._dict_schema.items():
-                # Handle Required/Optional keys
-                if hasattr(key, "key"):
-                    actual_key = key.key
-                    is_required = isinstance(key, Required)
-                else:
-                    actual_key = key
-                    is_required = True
-
-                if actual_key in data:
-                    value = data[actual_key]
-                    # Validate the value
-                    if validator is int and not isinstance(value, int):
-                        raise Exception(
-                            f"Key {actual_key}: Expected int, got {type(value).__name__}"
-                        )
-                    elif validator is str and not isinstance(value, str):
-                        raise Exception(
-                            f"Key {actual_key}: Expected str, got {type(value).__name__}"
-                        )
-                elif is_required:
-                    raise Exception(f"Missing required key: {actual_key}")
-            return data
-        elif hasattr(self, "_validator"):
-            return self._validator(data)
-        return data
-
-    def __getitem__(self, item):
-        if self._is_msgspec:
-            # For msgspec schemas, provide backward compatibility
-            # by returning appropriate validators for known fields
-            # This is a workaround to support legacy code that accesses schema fields
-            field_validators = {
-                "description": str,
-                "priority": Any(
-                    "highest",
-                    "very-high",
-                    "high",
-                    "medium",
-                    "low",
-                    "very-low",
-                    "lowest",
-                ),
-                "attributes": {str: object},
-                "task-from": str,
-                "dependencies": {str: object},
-                "soft-dependencies": [str],
-                "if-dependencies": [str],
-                "requires": Any("all-completed", "all-resolved"),
-                "deadline-after": str,
-                "expires-after": str,
-                "routes": [str],
-                "scopes": [str],
-                "tags": {str: str},
-                "extra": {str: object},
-                "treeherder": object,  # Complex type
-                "index": object,  # Complex type
-                "run-on-projects": object,  # Uses optionally_keyed_by
-                "run-on-tasks-for": [str],
-                "run-on-git-branches": [str],
-                "shipping-phase": Any(None, "build", "promote", "push", "ship"),
-                "always-target": bool,
-                "optimization": OptimizationSchema,
-                "needs-sccache": bool,
-                "worker-type": str,
-            }
-            return field_validators.get(item, str)
-        elif hasattr(self, "_dict_schema"):
-            return self._dict_schema.get(item, str)
-        return str  # Default fallback
+        try:
+            return msgspec.convert(data, cls)
+        except (msgspec.ValidationError, msgspec.DecodeError) as e:
+            raise msgspec.ValidationError(str(e))
 
 
 # Optimization schema types using msgspec
-class IndexSearchOptimization(msgspec.Struct, kw_only=True, rename="kebab"):
+class IndexSearchOptimization(Schema):
     """Search the index for the given index namespaces."""
 
     index_search: List[str]
 
 
-class SkipUnlessChangedOptimization(msgspec.Struct, kw_only=True, rename="kebab"):
+class SkipUnlessChangedOptimization(Schema):
     """Skip this task if none of the given file patterns match."""
 
     skip_unless_changed: List[str]
 
 
 # Task reference types using msgspec
-class TaskReference(msgspec.Struct, kw_only=True, rename="kebab"):
+class TaskReference(Schema):
     """Reference to another task."""
 
     task_reference: str
 
 
-class ArtifactReference(msgspec.Struct, kw_only=True, rename="kebab"):
+class ArtifactReference(Schema):
     """Reference to a task artifact."""
 
     artifact_reference: str

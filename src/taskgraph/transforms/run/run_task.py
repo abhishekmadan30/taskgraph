@@ -9,8 +9,6 @@ import dataclasses
 import os
 from typing import Dict, List, Literal, Optional, Union
 
-import msgspec
-
 from taskgraph.transforms.run import run_task_using
 from taskgraph.transforms.run.common import (
     support_caches,
@@ -26,14 +24,24 @@ EXEC_COMMANDS = {
 
 
 #: Schema for run.using run_task
-class RunTaskSchema(msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True):
+class RunTaskSchema(Schema):
     """
     Schema for run.using run_task.
     """
 
+    # Required fields first
     # Specifies the task type. Must be 'run-task'.
     using: Literal["run-task"]
 
+    # The command arguments to pass to the `run-task` script, after the checkout
+    # arguments. If a list, it will be passed directly; otherwise it will be
+    # included in a single argument to the command specified by `exec-with`.
+    command: Union[List[Union[str, Dict[str, str]]], str, Dict[str, str]]
+
+    # Base work directory used to set up the task.
+    workdir: str
+
+    # Optional fields
     # Specifies which caches to use. May take a boolean in which case either all
     # (True) or no (False) caches will be used. Alternatively, it can accept a
     # list of caches to enable. Defaults to only the checkout cache enabled.
@@ -51,11 +59,6 @@ class RunTaskSchema(msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=
     # directory where sparse profiles are defined (build/sparse-profiles/).
     sparse_profile: Optional[str] = None
 
-    # The command arguments to pass to the `run-task` script, after the checkout
-    # arguments. If a list, it will be passed directly; otherwise it will be
-    # included in a single argument to the command specified by `exec-with`.
-    command: Union[List[Union[str, Dict[str, str]]], str, Dict[str, str]]
-
     # Specifies what to execute the command with in the event the command is a
     # string.
     exec_with: Optional[Literal["bash", "powershell"]] = None
@@ -64,14 +67,11 @@ class RunTaskSchema(msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=
     # or Python installation is in a non-standard location on the workers.
     run_task_command: Optional[List[str]] = None
 
-    # Base work directory used to set up the task.
-    workdir: str
-
     # Whether to run as root. Defaults to False.
     run_as_root: bool = False
 
 
-run_task_schema = Schema(RunTaskSchema)
+run_task_schema = RunTaskSchema
 
 
 def common_setup(config, task, taskdesc, command):

@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 import msgspec
 
 from .util.python_path import find_object
-from .util.schema import validate_schema
+from .util.schema import Schema, validate_schema
 from .util.vcs import get_repository
 from .util.yaml import load_yaml
 
@@ -26,7 +26,7 @@ TaskPriority = Literal[
 ]
 
 
-class WorkerAlias(msgspec.Struct, kw_only=True, rename="kebab"):
+class WorkerAlias(Schema):
     """Worker alias configuration."""
 
     provisioner: Union[str, dict]
@@ -35,32 +35,38 @@ class WorkerAlias(msgspec.Struct, kw_only=True, rename="kebab"):
     worker_type: Union[str, dict]  # Can be keyed-by, maps from "worker-type"
 
 
-class Workers(msgspec.Struct, kw_only=True):
+class Workers(Schema, rename=None):
     """Workers configuration."""
 
     aliases: Dict[str, WorkerAlias]
 
 
-class Repository(msgspec.Struct, kw_only=True, rename="kebab"):
+class Repository(Schema):
     """Repository configuration."""
 
+    # Required fields first
     name: str
+
+    # Optional fields
     project_regex: Optional[str] = None  # Maps from "project-regex"
     ssh_secret_name: Optional[str] = None  # Maps from "ssh-secret-name"
     # Allow extra fields for flexibility
     __extras__: Dict[str, Any] = msgspec.field(default_factory=dict)
 
 
-class RunConfig(msgspec.Struct, kw_only=True, rename="kebab"):
+class RunConfig(Schema):
     """Run transforms configuration."""
 
     use_caches: Optional[Union[bool, List[str]]] = None  # Maps from "use-caches"
 
 
-class TaskGraphConfig(msgspec.Struct, kw_only=True, rename="kebab"):
+class TaskGraphConfig(Schema):
     """Taskgraph specific configuration."""
 
+    # Required fields first
     repositories: Dict[str, Repository]
+
+    # Optional fields
     register: Optional[str] = None
     decision_parameters: Optional[str] = None  # Maps from "decision-parameters"
     cached_task_prefix: Optional[str] = None  # Maps from "cached-task-prefix"
@@ -69,17 +75,18 @@ class TaskGraphConfig(msgspec.Struct, kw_only=True, rename="kebab"):
     run: Optional[RunConfig] = None
 
 
-class GraphConfigSchema(
-    msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"
-):
+class GraphConfigSchema(Schema):
     """Main graph configuration schema."""
 
+    # Required fields first
     trust_domain: str  # Maps from "trust-domain"
     task_priority: Union[
         TaskPriority, dict
     ]  # Maps from "task-priority", can be keyed-by
     workers: Workers
     taskgraph: TaskGraphConfig
+
+    # Optional fields
     docker_image_kind: Optional[str] = None  # Maps from "docker-image-kind"
     task_deadline_after: Optional[Union[str, dict]] = (
         None  # Maps from "task-deadline-after", can be keyed-by
@@ -161,9 +168,7 @@ class GraphConfig:
 def validate_graph_config(config):
     """Validate graph configuration using msgspec."""
     # With rename="kebab", msgspec handles the conversion automatically
-    validate_schema(
-        GraphConfigSchema, config, "Invalid graph configuration:", use_msgspec=True
-    )
+    validate_schema(GraphConfigSchema, config, "Invalid graph configuration:")
 
 
 def load_graph_config(root_dir):

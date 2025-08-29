@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 # Fetches schema using msgspec
-class FetchesSchema(msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True):
+class FetchesSchema(Schema):
     """Schema for fetch configuration."""
 
     artifact: str
@@ -39,14 +39,14 @@ class FetchesSchema(msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=
 
 
 # When configuration using msgspec
-class WhenConfig(msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True):
+class WhenConfig(Schema):
     """Configuration for when a task should be included."""
 
     files_changed: List[str] = msgspec.field(default_factory=list)
 
 
 # Run configuration using msgspec
-class RunConfig(msgspec.Struct, kw_only=True, omit_defaults=True):
+class RunConfig(Schema, rename=None):
     """Configuration for how to run a task."""
 
     using: str
@@ -56,19 +56,18 @@ class RunConfig(msgspec.Struct, kw_only=True, omit_defaults=True):
 
 
 # Run description schema using msgspec
-class RunDescriptionSchema(
-    msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True
-):
+class RunDescriptionSchema(Schema):
     """Schema for run transforms."""
 
-    # Task naming
-    name: TOptional[str] = None
-    label: TOptional[str] = None
-
-    # Required fields
+    # Required fields first
     description: str
     run: RunConfig
     worker_type: str
+
+    # Optional fields
+    # Task naming
+    name: TOptional[str] = None
+    label: TOptional[str] = None
 
     # Optional fields from task description
     priority: TOptional[str] = None
@@ -104,7 +103,7 @@ class RunDescriptionSchema(
 fetches_schema = FetchesSchema
 
 #: Schema for a run transforms - now using msgspec
-run_description_schema = Schema(RunDescriptionSchema)
+run_description_schema = RunDescriptionSchema
 
 
 transforms = TransformSequence()
@@ -399,15 +398,13 @@ def run_task_using(worker_implementation, run_using, schema=None, defaults={}):
 
 
 # Simple schema for always-optimized
-class AlwaysOptimizedRunSchema(msgspec.Struct, kw_only=True):
+class AlwaysOptimizedRunSchema(Schema, omit_defaults=False):
     """Schema for always-optimized run tasks."""
 
     using: str = "always-optimized"
 
 
-@run_task_using(
-    "always-optimized", "always-optimized", Schema(AlwaysOptimizedRunSchema)
-)
+@run_task_using("always-optimized", "always-optimized", AlwaysOptimizedRunSchema)
 def always_optimized(config, task, taskdesc):
     pass
 

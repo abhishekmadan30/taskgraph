@@ -10,16 +10,15 @@ phase will replace the task with the task from the other graph.
 
 from typing import List
 
-import msgspec
-
 from taskgraph.transforms.base import TransformSequence
 from taskgraph.transforms.run import run_task_using
+from taskgraph.util.schema import Schema
 
 transforms = TransformSequence()
 
 
 #: Schema for run.using index-search
-class RunTaskSchema(msgspec.Struct, kw_only=True, rename="kebab"):
+class RunTaskSchema(Schema):
     using: str
     # A list of indexes in decreasing order of priority at which to lookup for this
     # task. This is interpolated with the graph parameters.

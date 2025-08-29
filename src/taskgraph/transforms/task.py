@@ -48,7 +48,7 @@ def _run_task_suffix():
 
 
 # Task Description schema using msgspec
-class TaskDescriptionTreeherder(msgspec.Struct, kw_only=True, omit_defaults=True):
+class TaskDescriptionTreeherder(Schema, rename=None):
     """Treeherder-related information for a task."""
 
     symbol: TOptional[str] = None
@@ -72,7 +72,7 @@ class TaskDescriptionIndex(
     rank: Union[Literal["by-tier", "build_date"], int] = "by-tier"
 
 
-class TaskDescriptionWorker(msgspec.Struct, kw_only=True, omit_defaults=True):
+class TaskDescriptionWorker(Schema, rename=None):
     """Worker configuration for a task."""
 
     implementation: str
@@ -80,15 +80,15 @@ class TaskDescriptionWorker(msgspec.Struct, kw_only=True, omit_defaults=True):
     __extras__: Dict[str, TAny] = msgspec.field(default_factory=dict)
 
 
-class TaskDescriptionSchema(
-    msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True
-):
+class TaskDescriptionSchema(Schema):
     """Schema for task descriptions."""
 
     # The label for this task
     label: str
     # Description of the task (for metadata)
     description: str
+    # The provisioner-id/worker-type for the task
+    worker_type: str
     # Attributes for this task
     attributes: Dict[str, TAny] = msgspec.field(default_factory=dict)
     # Relative path (from config.path) to the file task was defined in
@@ -133,8 +133,6 @@ class TaskDescriptionSchema(
     always_target: bool = False
     # Optimization to perform on this task
     optimization: TAny = None  # Uses OptimizationSchema which has custom validation
-    # The provisioner-id/worker-type for the task
-    worker_type: str
     # Whether the task should use sccache compiler caching
     needs_sccache: bool = False
     # Information specific to the worker implementation
@@ -142,7 +140,7 @@ class TaskDescriptionSchema(
 
 
 #: Schema for the task transforms - now using msgspec
-task_description_schema = Schema(TaskDescriptionSchema)
+task_description_schema = TaskDescriptionSchema
 
 
 TC_TREEHERDER_SCHEMA_URL = (
@@ -212,9 +210,6 @@ def payload_builder(name, schema):
     if "implementation" not in fields:
         raise ValueError(f"Schema for {name} must include 'implementation' field")
 
-    # Wrap msgspec schema in our compatibility Schema class
-    schema = Schema(schema)
-
     def wrap(func):
         assert name not in payload_builders, f"duplicate payload builder name {name}"
         payload_builders[name] = PayloadBuilder(schema, func)  # type: ignore
@@ -264,7 +259,7 @@ class DockerWorkerCacheConfig(
     skip_untrusted: bool = False
 
 
-class DockerWorkerArtifactConfig(msgspec.Struct, kw_only=True, omit_defaults=True):
+class DockerWorkerArtifactConfig(Schema, rename=None):
     """Artifact configuration for docker-worker."""
 
     # type of artifact -- simple file, or recursive directory, or a volume mounted directory.
@@ -275,16 +270,19 @@ class DockerWorkerArtifactConfig(msgspec.Struct, kw_only=True, omit_defaults=Tru
     name: str
 
 
-class DockerWorkerPayloadSchema(
-    msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True
-):
+class DockerWorkerPayloadSchema(Schema):
     """Schema for docker-worker payload."""
 
+    # Required fields first
     implementation: str
-    os: Literal["linux"] = "linux"
     # For tasks that will run in docker-worker, this is the name of the docker
     # image or in-tree docker image to run the task in.
     docker_image: Union[str, Dict[str, str]]
+    # the maximum time to run, in seconds
+    max_run_time: int
+
+    # Optional fields
+    os: Literal["linux"] = "linux"
     # worker features that should be enabled
     relengapi_proxy: bool = False
     chain_of_trust: bool = False
@@ -305,8 +303,6 @@ class DockerWorkerPayloadSchema(
     # the command to run; if not given, docker-worker will default to the
     # command in the docker image
     command: TOptional[List[Union[str, Dict[str, str]]]] = None
-    # the maximum time to run, in seconds
-    max_run_time: int
     # the exit status code(s) that indicates the task should be retried
     retry_exit_status: TOptional[List[int]] = None
     # the exit status code(s) that indicates the caches used by the task should be purged
@@ -529,7 +525,7 @@ def build_docker_worker_payload(config, task, task_def):
 
 
 # Generic Worker schema using msgspec
-class GenericWorkerArtifactConfig(msgspec.Struct, kw_only=True, omit_defaults=True):
+class GenericWorkerArtifactConfig(Schema, rename=None):
     """Artifact configuration for generic-worker."""
 
     # type of artifact -- simple file, or recursive directory
@@ -570,25 +566,26 @@ class GenericWorkerMountConfig(
     format: TOptional[Literal["rar", "tar.bz2", "tar.gz", "zip"]] = None
 
 
-class GenericWorkerPayloadSchema(
-    msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True
-):
+class GenericWorkerPayloadSchema(Schema):
     """Schema for generic-worker payload."""
 
+    # Required fields first
     implementation: str
     os: Literal["windows", "macosx", "linux", "linux-bitbar"]
     # command is a list of commands to run, sequentially
     # on Windows, each command is a string, on OS X and Linux, each command is a string array
     # Using Any here because msgspec doesn't support union of multiple list types
     command: TAny
+    # the maximum time to run, in seconds
+    max_run_time: int
+
+    # Optional fields
     # artifacts to extract from the task image after completion
     artifacts: TOptional[List[GenericWorkerArtifactConfig]] = None
     # Directories and/or files to be mounted
     mounts: TOptional[List[GenericWorkerMountConfig]] = None
     # environment variables
     env: Dict[str, Union[str, Dict[str, str]]] = msgspec.field(default_factory=dict)
-    # the maximum time to run, in seconds
-    max_run_time: int
     # the exit status code(s) that indicates the task should be retried
     retry_exit_status: TOptional[List[int]] = None
     # the exit status code(s) that indicates the caches used by the task should be purged
@@ -719,7 +716,7 @@ def build_generic_worker_payload(config, task, task_def):
 
 
 # Beetmover schema using msgspec
-class BeetmoverReleaseProperties(msgspec.Struct, kw_only=True, rename="kebab"):
+class BeetmoverReleaseProperties(Schema):
     """Release properties for beetmover tasks."""
 
     app_name: str
@@ -730,7 +727,7 @@ class BeetmoverReleaseProperties(msgspec.Struct, kw_only=True, rename="kebab"):
     platform: str
 
 
-class BeetmoverUpstreamArtifact(msgspec.Struct, kw_only=True):
+class BeetmoverUpstreamArtifact(Schema, rename=None, omit_defaults=False):
     """Upstream artifact definition for beetmover."""
 
     # taskId of the task with the artifact
@@ -743,21 +740,22 @@ class BeetmoverUpstreamArtifact(msgspec.Struct, kw_only=True):
     locale: str
 
 
-class BeetmoverPayloadSchema(
-    msgspec.Struct, kw_only=True, rename="kebab", omit_defaults=True
-):
+class BeetmoverPayloadSchema(Schema):
     """Schema for beetmover worker payload."""
 
+    # Required fields first
     implementation: str
-    os: str = ""
     # the maximum time to run, in seconds
     max_run_time: int
-    # locale key, if this is a locale beetmover task
-    locale: TOptional[str] = None
-    partner_public: TOptional[bool] = None
     release_properties: BeetmoverReleaseProperties
     # list of artifact URLs for the artifacts that should be beetmoved
     upstream_artifacts: List[BeetmoverUpstreamArtifact]
+
+    # Optional fields
+    os: str = ""
+    # locale key, if this is a locale beetmover task
+    locale: TOptional[str] = None
+    partner_public: TOptional[bool] = None
     # Artifact map can be any object
     artifact_map: TOptional[dict] = None
 
@@ -789,7 +787,7 @@ def build_beetmover_payload(config, task, task_def):
 
 
 # Simple payload schemas using msgspec
-class InvalidPayloadSchema(msgspec.Struct, kw_only=True):
+class InvalidPayloadSchema(Schema, rename=None, omit_defaults=False):
     """Schema for invalid tasks - allows any fields."""
 
     implementation: str
@@ -798,7 +796,7 @@ class InvalidPayloadSchema(msgspec.Struct, kw_only=True):
     _extra: dict = msgspec.field(default_factory=dict, name="")
 
 
-class AlwaysOptimizedPayloadSchema(msgspec.Struct, kw_only=True):
+class AlwaysOptimizedPayloadSchema(Schema, rename=None, omit_defaults=False):
     """Schema for always-optimized tasks - allows any fields."""
 
     implementation: str
@@ -807,10 +805,12 @@ class AlwaysOptimizedPayloadSchema(msgspec.Struct, kw_only=True):
     _extra: dict = msgspec.field(default_factory=dict, name="")
 
 
-class SucceedPayloadSchema(msgspec.Struct, kw_only=True):
+class SucceedPayloadSchema(Schema, rename=None, omit_defaults=False):
     """Schema for succeed tasks - minimal schema."""
 
+    # Required field first
     implementation: str
+    # Optional field
     os: str = ""
 
 

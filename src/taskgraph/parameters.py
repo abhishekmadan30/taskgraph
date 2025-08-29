@@ -20,6 +20,7 @@ import msgspec
 
 from taskgraph.util import json, yaml
 from taskgraph.util.readonlydict import ReadOnlyDict
+from taskgraph.util.schema import Schema
 from taskgraph.util.taskcluster import find_task_id, get_artifact_url
 from taskgraph.util.vcs import get_repository
 
@@ -28,20 +29,22 @@ class ParameterMismatch(Exception):
     """Raised when a parameters.yml has extra or missing parameters."""
 
 
-class CodeReviewConfig(msgspec.Struct, kw_only=True, rename="kebab"):
+class CodeReviewConfig(Schema):
     """Code review configuration."""
 
+    # Required field
     phabricator_build_target: str
 
 
 #: Schema for base parameters.
 #: Please keep this list sorted and in sync with docs/reference/parameters.rst
-class BaseSchema(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):
+class BaseSchema(Schema):
     """Base parameters schema.
 
     This defines the core parameters that all taskgraph runs require.
     """
 
+    # Required fields (most are required)
     base_repository: str
     base_ref: str
     base_rev: str
@@ -58,8 +61,6 @@ class BaseSchema(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab
     head_tag: str
     level: str
     moz_build_date: str
-    next_version: Optional[str]
-    optimize_strategies: Optional[str]
     optimize_target_tasks: bool
     owner: str
     project: str
@@ -70,6 +71,10 @@ class BaseSchema(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab
     # used at run-time
     target_tasks_method: str
     tasks_for: str
+
+    # Optional fields
+    next_version: Optional[str]
+    optimize_strategies: Optional[str]
     version: Optional[str]
     code_review: Optional[CodeReviewConfig] = None
 
@@ -157,7 +162,7 @@ def extend_parameters_schema(schema, defaults_fn=None):
     graph-configuration.
 
     Args:
-        schema: The schema object (dict or msgspec) used to describe extended
+        schema: The schema object (msgspec) used to describe extended
             parameters.
         defaults_fn (function): A function which takes no arguments and returns a
             dict mapping parameter name to default value in the
@@ -170,9 +175,8 @@ def extend_parameters_schema(schema, defaults_fn=None):
     # Store the extension schema for use during validation
     _schema_extensions.append(schema)
 
-    # Also extend the base_schema if it's a Schema instance
-    if hasattr(base_schema, "extend"):
-        base_schema = base_schema.extend(schema)
+    # Schema extension is no longer supported with msgspec.Struct inheritance
+    # Extensions are tracked in _schema_extensions list instead
 
     if defaults_fn:
         defaults_functions.append(defaults_fn)
