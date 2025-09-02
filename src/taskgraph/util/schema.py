@@ -5,8 +5,6 @@
 
 import pprint
 from typing import List
-import re
-from collections.abc import Mapping
 
 import msgspec
 
@@ -64,9 +62,7 @@ def optionally_keyed_by(*arguments):
                     try:
                         res[kk] = validator(vv)
                     except Exception as e:
-                        if hasattr(e, "prepend"):
-                            e.prepend([k, kk])
-                        raise
+                        raise ValueError(f"Error in {k}.{kk}: {str(e)}") from e
                 return res
             elif k.startswith("by-"):
                 # Unknown by-field
@@ -192,7 +188,6 @@ EXCEPTED_SCHEMA_IDENTIFIERS = [
     "upstream-artifacts",
     "artifact-map",
 ]
-
 
 
 class Schema(msgspec.Struct, kw_only=True, omit_defaults=True, rename="kebab"):

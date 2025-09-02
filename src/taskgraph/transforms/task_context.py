@@ -24,9 +24,10 @@ class TaskContextConfig(Schema):
 
     If the same key is found in multiple places the order of precedence
     is as follows:
-      - Parameters
-      - `from-object` keys
-      - File
+
+    - Parameters
+    - `from-object` keys
+    - File
 
     That is to say: parameters will always override anything else.
     """
