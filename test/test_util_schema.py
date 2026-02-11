@@ -290,8 +290,10 @@ def test_optionally_keyed_by():
         "by-foo": {"a": "b", "c": "d"}
     }
 
-    with pytest.raises(msgspec.ValidationError):
-        msgspec.convert({"by-foo": {"a": 1, "c": "d"}}, typ)
+    # Inner dict values are Any, so mixed types are accepted
+    assert msgspec.convert({"by-foo": {"a": 1, "c": "d"}}, typ) == {
+        "by-foo": {"a": 1, "c": "d"}
+    }
 
     with pytest.raises(msgspec.ValidationError):
         msgspec.convert({"by-bar": {"a": "b"}}, typ)
@@ -305,11 +307,22 @@ def test_optionally_keyed_by_mulitple_keys():
     }
     assert msgspec.convert({"by-bar": {"x": "y"}}, typ) == {"by-bar": {"x": "y"}}
 
-    with pytest.raises(msgspec.ValidationError):
-        msgspec.convert({"by-foo": {"a": 123, "c": "d"}}, typ)
-
-    with pytest.raises(msgspec.ValidationError):
-        msgspec.convert({"by-bar": {"a": 1}}, typ)
+    # Inner dict values are Any, so mixed types are accepted
+    assert msgspec.convert({"by-foo": {"a": 123, "c": "d"}}, typ) == {
+        "by-foo": {"a": 123, "c": "d"}
+    }
+    assert msgspec.convert({"by-bar": {"a": 1}}, typ) == {"by-bar": {"a": 1}}
 
     with pytest.raises(msgspec.ValidationError):
         msgspec.convert({"by-unknown": {"a": "b"}}, typ)
+
+
+def test_optionally_keyed_by_object_passthrough():
+    """When the type argument is `object`, optionally_keyed_by returns object directly."""
+    typ = optionally_keyed_by("foo", object, use_msgspec=True)
+    assert typ is object
+    # object accepts anything via msgspec.convert
+    assert msgspec.convert("hello", typ) == "hello"
+    assert msgspec.convert(42, typ) == 42
+    assert msgspec.convert({"by-foo": {"a": "b"}}, typ) == {"by-foo": {"a": "b"}}
+    assert msgspec.convert({"arbitrary": "dict"}, typ) == {"arbitrary": "dict"}
