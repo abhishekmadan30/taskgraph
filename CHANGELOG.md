@@ -1,5 +1,17 @@
 # Change Log
 
+## [19.1.0] - 2026-02-17
+
+### Added
+
+- Converted all remaining voluptuous schemas to msgspec
+
+### Fixed
+
+- Parent image name lookup in `build-image` now uses task ids
+- Decision task environment now passes full ref names for chain-of-trust verification
+- Exclude `__pycache__` directories when generating docker contexts
+
 ## [19.0.0] - 2026-02-06
 
 ### Added
