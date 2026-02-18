@@ -7,6 +7,7 @@ from pathlib import Path
 from pprint import pprint
 
 import pytest
+import voluptuous
 from pytest_taskgraph import FakeParameters
 
 from taskgraph.transforms import task
@@ -966,3 +967,36 @@ def test_task_priority(run_transform, graph_config, test_task):
         assert task_dict["task"]["priority"] == priority
     else:
         assert task_dict["task"]["priority"] == graph_config["task-priority"]
+
+
+@pytest.fixture
+def dict_schema_builder():
+    @task.payload_builder("test-builder", schema={"command": [str]})
+    def _builder(config, task, task_def):
+        pass
+
+    yield task.payload_builders["test-builder"].schema
+    task.payload_builders.pop("test-builder", None)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {"implementation": "test-builder", "command": ["echo"]},
+        {"implementation": "test-builder", "command": ["echo"], "os": "linux"},
+    ),
+)
+def test_dict_schema_accepts_valid_payload(dict_schema_builder, payload):
+    dict_schema_builder(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {"implementation": "wrong-name", "command": ["echo"]},
+        {"command": ["echo"]},
+    ),
+)
+def test_dict_schema_rejects_invalid_payload(dict_schema_builder, payload):
+    with pytest.raises(voluptuous.MultipleInvalid):
+        dict_schema_builder(payload)

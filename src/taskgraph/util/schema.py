@@ -48,6 +48,9 @@ def validate_schema(schema, obj, msg_prefix):
         # Handle plain Python types (e.g. str, int) via msgspec.convert
         elif isinstance(schema, type):
             msgspec.convert(obj, schema)
+        # Handle plain dict schemas (e.g. from downstream payload builders)
+        elif isinstance(schema, dict):
+            voluptuous.Schema(schema)(obj)
         else:
             raise TypeError(f"Unsupported schema type: {type(schema)}")
     except (

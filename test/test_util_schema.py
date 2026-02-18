@@ -271,6 +271,18 @@ class TestNestedStructFieldsOptional(unittest.TestCase):
         )
 
 
+class TestValidateSchemaDictHandler(unittest.TestCase):
+    """validate_schema must accept plain dict schemas passed
+    by downstream payload builders without raising TypeError."""
+
+    def test_dict_schema_valid(self):
+        validate_schema({"name": str, "count": int}, {"name": "a", "count": 1}, "pfx")
+
+    def test_dict_schema_invalid(self):
+        with self.assertRaises(Exception):
+            validate_schema({"name": str}, {"name": 123}, "pfx")
+
+
 def test_optionally_keyed_by():
     typ = optionally_keyed_by("foo", str, use_msgspec=True)
     assert msgspec.convert("baz", typ) == "baz"

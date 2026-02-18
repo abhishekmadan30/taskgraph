@@ -16,11 +16,14 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Callable, Literal, Optional, Union
 
+import voluptuous
+
 from taskgraph.transforms.base import TransformSequence
 from taskgraph.util.hash import hash_path
 from taskgraph.util.keyed_by import evaluate_keyed_by
 from taskgraph.util.schema import (
     IndexSchema,
+    LegacySchema,
     OptimizationType,
     Schema,
     TaskPriority,
@@ -194,6 +197,14 @@ class PayloadBuilder:
 
 
 def payload_builder(name, schema):
+    if isinstance(schema, dict):
+        schema = LegacySchema(
+            {
+                voluptuous.Required("implementation"): name,
+                voluptuous.Optional("os"): str,
+            }
+        ).extend(schema)
+
     def wrap(func):
         assert name not in payload_builders, f"duplicate payload builder name {name}"
         payload_builders[name] = PayloadBuilder(schema, func)
