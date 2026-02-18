@@ -232,22 +232,22 @@ DockerImage = Union[str, dict[str, str]]
 
 class DockerWorkerCacheEntry(Schema):
     # only one type is supported by any of the workers right now
-    type: Literal["persistent"]
+    type: Literal["persistent"] = "persistent"
     # name of the cache, allowing reuse by subsequent tasks naming the same cache
-    name: str
+    name: Optional[str] = None
     # location in the task image where the cache will be mounted
-    mount_point: str
+    mount_point: Optional[str] = None
     # Whether the cache is not used in untrusted environments (like the Try repo).
     skip_untrusted: Optional[bool] = None
 
 
 class DockerWorkerArtifact(Schema):
     # type of artifact -- simple file, or recursive directory, or a volume mounted directory.
-    type: Literal["file", "directory", "volume"]
+    type: Optional[Literal["file", "directory", "volume"]] = None
     # task image path from which to read artifact
-    path: str
+    path: Optional[str] = None
     # name of the produced artifact (root of the names for type=directory)
-    name: str
+    name: Optional[str] = None
 
 
 class DockerWorkerPayloadSchema(Schema, forbid_unknown_fields=False, kw_only=True):
@@ -675,12 +675,12 @@ def build_generic_worker_payload(config, task, task_def):
 
 
 class ReleaseProperties(Schema):
-    app_name: str
-    app_version: str
-    branch: str
-    build_id: str
-    hash_type: str
-    platform: str
+    app_name: Optional[str] = None
+    app_version: Optional[str] = None
+    branch: Optional[str] = None
+    build_id: Optional[str] = None
+    hash_type: Optional[str] = None
+    platform: Optional[str] = None
 
 
 class UpstreamArtifact(Schema, rename="camel"):
