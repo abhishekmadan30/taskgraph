@@ -316,9 +316,9 @@ class Schema(
 
 class IndexSchema(Schema):
     # the name of the product this build produces
-    product: str
+    product: Optional[str] = None
     # the names to use for this task in the TaskCluster index
-    job_name: str
+    job_name: Optional[str] = None
     # Type of gecko v2 index to use
     type: str = "generic"
     # The rank that the task will receive in the TaskCluster
