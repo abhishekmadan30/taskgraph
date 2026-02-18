@@ -1,5 +1,12 @@
 # Change Log
 
+## [19.2.0] - 2026-02-18
+
+### Fixed
+
+- Restore `payload_builder` wrapping for dict schemas
+- Make nested struct fields optional to match voluptuous defaults
+
 ## [19.1.0] - 2026-02-17
 
 ### Added
