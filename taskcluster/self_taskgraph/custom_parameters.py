@@ -3,10 +3,10 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os
-
-from voluptuous import All, Any, Range, Required
+from typing import Optional
 
 from taskgraph.parameters import extend_parameters_schema
+from taskgraph.util.schema import Schema
 
 
 def get_defaults(repo_root):
@@ -15,12 +15,18 @@ def get_defaults(repo_root):
     }
 
 
-extend_parameters_schema(
-    {
-        Required("pull_request_number"): Any(All(int, Range(min=1)), None),
-    },
-    defaults_fn=get_defaults,
-)
+class CustomParametersSchema(Schema, kw_only=True, rename=None):
+    pull_request_number: Optional[int]
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.pull_request_number is not None and self.pull_request_number < 1:
+            raise ValueError(
+                f"pull_request_number must be >= 1, got {self.pull_request_number}"
+            )
+
+
+extend_parameters_schema(CustomParametersSchema, defaults_fn=get_defaults)
 
 
 def decision_parameters(graph_config, parameters):

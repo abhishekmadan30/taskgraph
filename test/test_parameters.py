@@ -7,11 +7,11 @@ import datetime
 import gzip
 import os
 from base64 import b64decode
+from typing import Optional
 from unittest import TestCase, mock
 
 import mozilla_repo_urls
 import pytest
-from voluptuous import Optional, Required, Schema
 
 import taskgraph  # noqa: F401
 from taskgraph import parameters
@@ -21,6 +21,7 @@ from taskgraph.parameters import (
     extend_parameters_schema,
     load_parameters_file,
 )
+from taskgraph.util.schema import Schema
 
 from .mockedopen import MockedOpen
 
@@ -274,20 +275,19 @@ def test_parameters_format_spec(spec, expected):
 
 
 def test_extend_parameters_schema(monkeypatch):
-    monkeypatch.setattr(
-        parameters,
-        "base_schema",
-        Schema(
-            {
-                Required("foo"): str,
-            }
-        ),
-    )
-    monkeypatch.setattr(
-        parameters,
-        "defaults_functions",
-        list(parameters.defaults_functions),
-    )
+    class FooSchema(Schema, kw_only=True, rename=None):
+        foo: str
+
+    class BarSchema(Schema, kw_only=True, rename=None):
+        bar: Optional[bool] = None
+
+    monkeypatch.setattr(parameters, "base_schema", FooSchema)
+    # Replace defaults_functions with an empty list so _fill_defaults doesn't
+    # shell out to git via the built-in _get_defaults (which fails on Windows
+    # CI when safe.directory isn't honored). The third assertion below adds
+    # back its own defaults_fn via extend_parameters_schema.
+    monkeypatch.setattr(parameters, "defaults_functions", [])
+    monkeypatch.setattr(parameters, "_parameter_extensions", [])
 
     with pytest.raises(ParameterMismatch):
         Parameters(strict=False).check()
@@ -296,9 +296,7 @@ def test_extend_parameters_schema(monkeypatch):
         Parameters(foo="1", bar=True).check()
 
     extend_parameters_schema(
-        {
-            Optional("bar"): bool,
-        },
+        BarSchema,
         defaults_fn=lambda root: {"foo": "1", "bar": False},
     )
 
